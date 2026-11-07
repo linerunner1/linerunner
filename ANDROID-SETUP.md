@@ -1,60 +1,50 @@
-# LineRunner Version 2 — Android upgrade and testing
+# LineRunner v3 — Android update instructions
 
-LineRunner is an installable Android web app (PWA), not a native APK. There are no subscriptions, paid APIs, or accounts inside the app. The source files can be hosted for free on GitHub Pages, and recordings and scenes are stored on your phone.
+LineRunner is a free installable web app (PWA). This ZIP contains its static code, not an Android APK. It uses the same GitHub Pages address and same IndexedDB storage format as your earlier installation.
 
-## IMPORTANT: Back up existing LineRunner work before changing files
+## Before updating: back up your projects
 
-1. Open the **existing installed LineRunner app** on Android.
-2. Tap **Backup** (in the original version, at the top of the page).
-3. Save the downloaded JSON backup somewhere safe, such as your phone's Downloads folder. The file includes all projects and recorded audio.
-4. Do not uninstall LineRunner, clear Chrome data, or delete site data. Updating the code at the **same GitHub Pages URL** retains your current data in the browser.
+1. On your Android phone, open the **existing LineRunner app**.
+2. Select **Settings → Export complete backup**.
+3. Save the downloaded `LineRunner-backup-YYYY-MM-DD.json` file somewhere safe outside the browser (for example, Android Downloads and a second copy elsewhere). This file contains your recordings and may be large; treat it as private.
 
-## Upgrade the existing GitHub Pages installation (no new repository)
+Do not uninstall the existing app, clear Chrome site data, or change the GitHub Pages address.
 
-1. Download `LineRunner-Android-v2.zip` on your computer and extract it.
-2. Open the extracted `linerunner` folder. The files include `index.html`, `app.js`, `styles.css`, `sw.js`, `manifest.webmanifest`, and the image icons.
-3. On GitHub, go to your **existing** `linerunner` repository. **Do not create a new repository.**
-4. Use **Add file → Upload files**, and drag all the contents of the extracted `linerunner` folder onto the upload area, replacing files with matching names if GitHub offers that option. Commit changes to `main`. If the web uploader does not allow replacing existing files, use GitHub's file editor for the text files (or GitHub Desktop) to overwrite the existing files, then commit.
-5. Go to **Actions** and verify the Pages deployment completes successfully. Your Pages settings should remain **Deploy from a branch**, `main`, `/ (root)`.
-6. Open your **same** URL in Android Chrome, e.g. `https://YOUR-USERNAME.github.io/linerunner/`. If the old version still displays, refresh; fully close the home-screen app and reopen it. The service worker caches code, so an additional reload may be needed after the new worker activates.
-7. Check that the header contains **Settings** instead of separate Backup / Restore buttons and that the Library panel contains **New play / folder**.
-8. Confirm your existing scenes and recordings are present. If you cannot find them, **do not clear any browser data**. Check that you are using the exact original GitHub Pages URL and Chrome profile. You can restore your exported backup via **Settings → Restore a saved backup**, but note that restoring replaces current project data.
+## Update GitHub Pages
 
-## First-time setup
+1. On your PC, download `LineRunner-Android-v3.zip` and extract it.
+2. Open the extracted **linerunner** folder. Select the **files inside** that folder, not the folder itself. There is a new file called `emoji-data.json` that must be uploaded with the others.
+3. Sign in to GitHub and open **the same** repository you used for Version 2 (normally named `linerunner`).
+4. Under **Code**, choose **Add file → Upload files**. Drag the extracted files onto the upload area. Keep their file names and replace any matching older files when committing. Make sure `index.html`, `app.js`, `styles.css`, `sw.js`, `emoji-data.json`, and `manifest.webmanifest` end up at the **repository root**.
+5. Click **Commit changes** to the `main` branch.
+6. Open **Actions** and look for the successful GitHub Pages deployment (green checkmark). Then visit **Settings → Pages** or open your existing website address.
+7. On Android, open the same `https://USERNAME.github.io/linerunner/` address in Chrome; reload it. Close and reopen the installed app. If the old UI remains, close the app and reload the website in Chrome once more so the updated service worker can activate. Do **not** clear site data.
 
-If you never installed LineRunner: create a free public GitHub repository, upload the files from inside the `linerunner` folder to the repository root, then enable Settings → Pages → Deploy from a branch → `main` → `/ (root)`. Open the resulting HTTPS website on Android Chrome, choose **Install app** or **Add to Home screen** and grant microphone access when prompted.
+If your GitHub upload interface refuses to overwrite same-name files, use the repository's file editor for the changed files, or GitHub Desktop to commit the folder contents. Do not create a new repository or change the public URL just to upgrade.
 
-## Version 2 changes
+## Confirm Version 3 has loaded
 
-- The Library drawer has a prominent **New play / folder** control. Scenes can be created inside play folders or moved between standalone and play folders using **Rename → Location**.
-- The main bar has one playback behavior: mute, loop, hide/reveal and play controls. Listen/Rehearsal/Memorization dropdown removed.
-- Backups and restore moved into **Settings**.
-- Microphone recording automatically attempts speech-to-text if supported by Chrome. You can correct the transcript before Save. Recognition can fail or require network access; your audio recording still works independently.
-- Recording effect filters removed. Each character has a default pitch in semitones from -6 to +6, with natural pitch at 0. Individual tiles can override the character's pitch.
-- Pitch shifts are computed locally by overlapping audio grains and preserve the recorded sample count and nominal playback duration. Audio quality can degrade at large shifts. No online service is used for this processing, but long recordings or slower Android devices may take time to process. If processing fails, unshifted audio is used.
-- Character settings apply to all their lines unless a particular tile specifies an override. Shared character default extra silence can also be overridden per line.
-- Tap a character avatar on a dialogue tile to edit character-wide defaults. Tap the pencil button to edit the individual tile.
-- Individual tiles use one play/pause button (which changes icon) plus Replay.
+- Scene header and cast list appear above the playback bar.
+- The playback bar includes **Add dialogue**, **Loop** and **↑ Top**.
+- The toolbar stays visible when scrolling into the dialogue tiles.
+- Tiles use **🔴** to start recording and **⏹** to stop. Record and Edit settings expand **inside** each tile.
+- Tiles show a **⚙** settings button, plus ↑ and ↓ reorder buttons; there is no nonworking grip.
+- Character settings have **Audio settings** first and **Avatar** last. Tap **Choose emoji** for a categorized, searchable emoji browser.
 
-## Testing checklist
+## Key limitations
 
-- [ ] Verify old scenes and recordings survive the upgrade
-- [ ] Create a play with **Library → New play / folder**
-- [ ] Create a scene and choose the new play folder
-- [ ] Move an existing standalone scene using **Rename → Location**
-- [ ] Edit a character avatar and default pitch
-- [ ] Record a new line and check whether transcription appears automatically
-- [ ] Correct transcript, save recording, and play it
-- [ ] Shift the character pitch to +1 and verify duration seems unchanged
-- [ ] Override pitch on one tile and verify other lines inherit the character default
-- [ ] Play/pause using the combined button; replay a line
-- [ ] Mute a character and adjust extra rehearsal time
-- [ ] Reveal/hide a line, loop the scene, and export a new backup via Settings
+- **Transcription:** This release attempts automatic Web Speech recognition while recording, but Android Chrome may deny simultaneous microphone access. The app now displays a clear transcription status. Recording still works even if no transcript is returned. In that case, tap the transcript field and use your Android keyboard's microphone, or type the line manually. This cannot be guaranteed without adding an offline speech-recognition model or Android-native speech recognition integration.
+- **Pitch:** Recorded lines can be adjusted in semitone increments while maintaining approximate duration using an experimental free browser-side processor. Results vary by phone and pitch amount.
+- **Emoji:** The app bundles a broad offline library of approximately 1,700 emoji choices and sequences, including people, animals, objects, symbols and flags. Exact rendering and newer emoji support depend on your Android OS/fonts; not every possible Unicode ZWJ variant is bundled.
+- **Storage:** Data remains in the local browser storage for the original site address. Backups are essential before site-data clearing or changing devices.
+- **Offline use:** App shell and emoji library are cached after the first successful HTTPS visit. Browser speech recognition and some TTS voices may still require connectivity.
 
-## Technical limitations and privacy
+## Quick test
 
-- **Browser recognition is best effort.** SpeechRecognition can be unavailable on Android Chrome or can fail while MediaRecorder is using the same microphone. It may transmit speech data to your browser vendor; no LineRunner server receives it. Native Gboard voice dictation remains a fallback.
-- **Pitch processing is an experimental free effect** based on time-domain overlapping grains, not studio-quality pitch correction. Very long lines are skipped; original recordings remain untouched. It does not change playback speed when successful.
-- **Offline:** The app's interface and local recordings are cached/available after first load, but TTS and speech recognition may depend on Android's installed voices and connectivity.
-- **Local storage:** Browser data is tied to the original site and browser profile. Export backups regularly.
-- **Platform:** PWA, not an APK, and not verified on every Android phone.
+1. Open an existing scene and verify its recordings still appear.
+2. Tap any character avatar, then **Choose emoji**. Browse a category, search for an emoji and save.
+3. Tap the **⚙** tile button. Confirm the settings open *inside* that tile.
+4. Tap **🔴** and allow microphone access. Confirm it becomes **⏹**. Speak, tap Stop, and review the transcription status. Save the recording.
+5. Tap **Play scene** and scroll down. Check the playback bar sticks below the application header, and **↑ Top** scrolls back without stopping playback.
+6. Toggle Loop, add a new dialogue tile from the sticky bar, and reorder with ↑ and ↓.
+7. Close and reopen the app to check that the edits were retained.
