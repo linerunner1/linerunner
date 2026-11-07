@@ -1,9 +1,7 @@
-# LineRunner v4
+# LineRunner v5
 
-Free, local-first Android actor rehearsal Progressive Web App.
+Free, Android-first actor rehearsal PWA. Open `ANDROID-SETUP.md` for setup, upgrade, backup and testing instructions.
 
-See `ANDROID-SETUP.md` for update instructions and tests.
+**Main improvements:** folder-specific backups/imports, scene management, one-tap Top/Bottom navigation, editable paused playback line number, visual non-destructive trimming inside a fixed-size dialogue tile, and simplified tile transport controls.
 
-Features: plays/folder home screen (including Miscellaneous), scene creation and relocation, character cast settings, simple locally processed audio effects and pitch, direct recording and auto-save inside dialogue tiles, inline editable flashcard text, per-tile mute and independent play controls, numbered lines with arrow reordering, sticky master scene playback with loop/back-to-top, and local project backup/restore.
-
-No paid services, no speech recognition, no text-to-speech, no avatars, no extra rehearsal seconds.
+**Important:** The PWA is served from HTTPS on Android. It stores work in the browser's IndexedDB; exporting a folder backup provides a separate safeguard. Existing LineRunnerDB data is reused when the URL remains unchanged.
