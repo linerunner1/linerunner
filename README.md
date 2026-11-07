@@ -1,7 +1,5 @@
-# LineRunner — Android Version 6
+# LineRunner — Android Version 7
 
-A free, Android-first, offline-friendly actor rehearsal Progressive Web App.
+A free, local-first actor's line rehearsal PWA. See `ANDROID-SETUP.md` for instructions to update an existing GitHub Pages installation.
 
-Extract and host the files via HTTPS (for example, your existing GitHub Pages project). See `ANDROID-SETUP.md` for upgrading the installed app and protecting local recordings.
-
-Includes a tile-sized waveform trimmer with separate draggable trim boundaries and scrub playhead, trim Play/Pause and Replay, consistent tile audio controls, and no master Stop button.
+This release includes a simplified scene header, consistent scene settings icon, total recorded scene duration, and continuous playback when jumping to a different line. No subscriptions or external APIs are required.
