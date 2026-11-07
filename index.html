@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#151a2b"><meta name="description" content="LineRunner — a private, free actor's line rehearsal studio.">
+<link rel="manifest" href="manifest.webmanifest"><link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="icon-192.png"><link rel="stylesheet" href="styles.css"><title>LineRunner — Actor's Rehearsal Studio</title>
+</head>
+<body>
+<div id="app">
+  <header class="topbar"><div class="brand"><div class="logo">LR<span>›</span></div><div><strong>LineRunner</strong><small>Actor's rehearsal studio</small></div></div><div class="topright"><button id="mobileLibraryBtn" class="button ghost mobile-library" aria-controls="sidebar" aria-expanded="false">☰ Library</button><span id="saveStatus" class="save-status">Saved locally</span><button id="exportBtn" class="button ghost" title="Back up your project as a file">↧ Backup</button><label class="button ghost filelabel" title="Restore from a backup">↥ Restore<input id="importFile" type="file" accept=".json,application/json" hidden></label></div></header>
+  <div class="workspace">
+  <aside class="sidebar" id="sidebar"><div class="sideheading"><span>YOUR LIBRARY</span><button id="newPlayBtn" class="iconbutton" title="New play">＋</button></div><div id="library"></div><button id="newSceneBtn" class="button primary full">＋ New standalone scene</button><div class="side-bottom"><p>Private by design</p><span>Projects and recordings stay in this browser. Back up your work regularly.</span></div></aside>
+  <main class="main"><div id="emptyState" class="empty"><div class="empty-mark">🎭</div><h1>Your stage is ready</h1><p>Select a scene or create one to start building your rehearsal.</p><button id="emptyCreate" class="button primary">Create a scene</button></div>
+  <div id="sceneUI" hidden>
+    <div class="scenehead"><div class="breadcrumb" id="breadcrumb"></div><div class="sceneheading"><div><h1 id="sceneTitle"></h1><div class="scene-sub" id="sceneDescription"></div></div><div class="scene-actions"><button id="renameSceneBtn" class="button ghost">✎ Rename</button><button id="deleteSceneBtn" class="button danger-quiet">Delete scene</button></div></div></div>
+    <section class="toolbar"><div class="play-controls"><button id="startBtn" class="button primary"><span id="startIcon">▶</span> <span id="startLabel">Play scene</span></button><button id="stopBtn" class="button ghost">■ Stop</button><button id="backBtn" class="button ghost" title="Previous line">⏮</button><button id="nextBtn" class="button ghost" title="Next line">⏭</button></div><div class="mode-controls"><label class="sr-only" for="modeSelect">Playback mode</label><select id="modeSelect"><option value="rehearsal">Rehearsal</option><option value="listen">Listen</option><option value="memorize">Memorization</option></select><label class="checklabel"><input id="loopToggle" type="checkbox"> Loop scene</label></div></section>
+    <div class="scene-tools"><div class="cast-head"><strong>Cast</strong><span id="castHint"></span></div><div id="castRow" class="cast-row"></div><div class="scene-tools-right"><button id="hideAllBtn" class="button ghost small">Hide all lines</button><button id="showAllBtn" class="button ghost small">Show all lines</button></div></div>
+    <div class="timeline-header"><div><h2>Dialogue timeline</h2><p>In speaking order · drag the grip to rearrange</p></div><button id="addLineBtn" class="button primary">＋ Add dialogue</button></div><div id="timeline" class="timeline"></div><div id="timelineEmpty" class="timeline-empty" hidden>No dialogue yet. Add a character and their first line to get started.</div><div class="bottom-add"><button id="bottomAddBtn" class="button dashed">＋ Add next line</button></div>
+  </div></main></div>
+</div>
+<div id="modalBackdrop" class="modal-backdrop" hidden><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modalhead"><h2 id="modalTitle"></h2><button id="closeModal" class="iconbutton" aria-label="Close">✕</button></div><div id="modalBody"></div></div></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script src="app.js" defer></script>
+</body></html>
