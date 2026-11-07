@@ -1,9 +1,9 @@
-# LineRunner — Android Version 3
+# LineRunner v4
 
-A free, local-first, installable actor's line rehearsal PWA. See **ANDROID-SETUP.md** for update and installation instructions.
+Free, local-first Android actor rehearsal Progressive Web App.
 
-Highlights: scenes inside play folders or standalone, reusable characters, categorized searchable emoji avatar selection, inline recording/transcripts/settings inside timeline tiles, automatic transcription attempted where browser support permits, text-to-speech, shared character audio defaults and per-line overrides, simple pitch shift, hide/reveal dialogue flashcards, per-line and character mute, rehearsal pause adjustments, loop and back-to-top on sticky master playback bar, manual up/down reordering, and complete JSON backups including recordings.
+See `ANDROID-SETUP.md` for update instructions and tests.
 
-The app needs a secure HTTPS origin on Android for microphone permission. GitHub Pages is free for public-source repositories. Audio recordings and project data remain in browser-local IndexedDB. Neither a paid API nor a server database is used.
+Features: plays/folder home screen (including Miscellaneous), scene creation and relocation, character cast settings, simple locally processed audio effects and pitch, direct recording and auto-save inside dialogue tiles, inline editable flashcard text, per-tile mute and independent play controls, numbered lines with arrow reordering, sticky master scene playback with loop/back-to-top, and local project backup/restore.
 
-Limitations: Android Chrome's automatic live recognition while recording is not reliable; use editable transcripts/keyboard dictation if unavailable. Pitch processing is experimental. Emoji availability varies with Android font support. This ZIP is not an APK.
+No paid services, no speech recognition, no text-to-speech, no avatars, no extra rehearsal seconds.

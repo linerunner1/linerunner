@@ -2,7 +2,7 @@
   "id":"./",
   "name":"LineRunner — Actor Rehearsal",
   "short_name":"LineRunner",
-  "description":"Private, free actor rehearsal with voice recording, characters and spoken scene playback.",
+  "description":"Free Android actor rehearsal with local voice recording and scene playback.",
   "start_url":"./index.html",
   "scope":"./",
   "display":"standalone",
