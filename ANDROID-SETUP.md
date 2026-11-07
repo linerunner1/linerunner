@@ -1,55 +1,34 @@
-# LineRunner v5 — update your existing Android app
+# LineRunner Version 6 — Android update
 
-LineRunner remains a free, locally stored Progressive Web App (PWA). It is **not** a Play Store APK. Use the **same** GitHub Pages repository and website URL you used for previous versions.
+LineRunner is a **free Android Progressive Web App (PWA)**, not an APK. It uses the same GitHub Pages address as previous versions and stores project data in local browser storage.
 
-## Before updating: protect your work
+## Update your existing installation
 
-1. Open your installed LineRunner v4 app on Android.
-2. Tap **Settings** and choose **Export complete backup**. Save the `.json` file somewhere safe (for example, your phone's Downloads folder, then a second copy in your own secure storage).
-3. Do not clear Chrome site data, delete the existing installed app, or change the GitHub Pages URL.
+1. **Make a backup before updating.** Open the existing LineRunner app on your phone. On its home screen, open the folder settings (`⋯`) for each play or folder and choose **Export backup**. Save the downloaded `.json` files somewhere safe. Do not clear browser data or uninstall LineRunner.
+2. On your computer, download and extract `LineRunner-Android-v6.zip`. Open the extracted `linerunner` folder.
+3. Update **your existing GitHub repository** with the contents of that folder, in the same repository root as `index.html`. For multiple same-named files, **GitHub Desktop** is the simplest option: copy the extracted files into your local repository, then commit and push to `main`. GitHub's browser uploader does not always overwrite existing files cleanly; use file editing or GitHub Desktop if needed.
+4. In GitHub, open **Actions** and confirm that the latest Pages deployment succeeded.
+5. On Android, close LineRunner and reopen it. If the previous version persists, open your normal GitHub Pages website address directly in Chrome, refresh, then reopen the installed app. Service-worker updates can require another restart.
+6. **Do not change the site address, uninstall the PWA, or clear Chrome site data** to force the update. The new version uses the same `LineRunnerDB` IndexedDB database and storage format.
 
-Version 5 reads the existing `LineRunnerDB` local database. Existing scenes, recordings, and characters should remain available at the same website origin. Backing up is important because browser storage can be lost.
+## What changed in Version 6
 
-## Install Version 5 through your existing GitHub Pages site
+- **Trim editor:** Tap a tile's timestamp. The tile flips to an in-place trim editor without changing its outer dimensions. The waveform includes left/right trim handles and a separate amber **playhead** you can drag to inspect a position, with readouts rounded to tenths of a second. Tap the waveform to move the playhead. **Play/Pause** starts or pauses the selected recording segment, **Replay** starts again from the trim's beginning, **Reset trim** restores the original range, and **Done** saves trim points non-destructively.
+- **Mute:** A monochrome speaker icon means audible; a crossed speaker icon means muted. If you toggle a tile back to the character's default mute state, the override and its message disappear. You can still explicitly restore the character's default from the override message.
+- **Recording:** The recording button is a red circle when idle and a streamlined square when recording. Tap the square to stop and save automatically. Re-recording prompts before replacing the existing take.
+- **Master playback:** The separate Stop button has been removed. The Play button changes to Pause while playing. Previous/Next, Loop, editable paused line number, Top, and Bottom controls remain.
+- The folder-based home screen, character settings, effects, scene management, backups, and local autosaving are retained.
 
-1. Download and extract **LineRunner-Android-v5.zip** on your computer.
-2. Open the `linerunner` folder in the extracted ZIP.
-3. Open the **same** GitHub repository where your existing LineRunner is hosted.
-4. Replace the old contents of the repository root with the new files inside `linerunner`: `index.html`, `app.js`, `styles.css`, `sw.js`, `manifest.webmanifest`, the icon files, and documents. GitHub's web Upload Files page does **not reliably overwrite** existing files with the same name. To update in the browser, open each existing file and use **Edit** to replace its contents, or use GitHub Desktop to copy the extracted files over the local repository and commit the changes. The latter is easier for a multi-file update.
-5. Commit changes to `main`. In **Actions**, confirm the GitHub Pages deployment succeeded.
-6. On Android, close LineRunner fully and relaunch it. A service-worker update may require another close/reopen cycle or opening the GitHub Pages URL in Chrome and refreshing it. Do **not** clear storage to force the update.
-7. The Settings button should be gone. The home screen's **+ New folder** button should offer **Create new folder** and **Import folder backup**.
+## Android test checklist
 
-## Important: migration and backup formats
+1. Verify your existing folders, scenes, and recordings are still present.
+2. Record a short disposable line. Confirm its recording button changes from a red circle to a square, and the audio automatically saves when stopped.
+3. Tap that tile's duration. Confirm the **tile keeps the same height** and displays the waveform, two trim handles, and amber playhead.
+4. Drag the amber marker. Press Play/Pause and confirm it moves while audio plays and stays in position when paused. Press Replay to restart at the chosen trim's beginning.
+5. Move both trim handles, press Done, and check the trimmed line plays as expected. Reopen and Reset trim to ensure the original audio remains available.
+6. Set a character's default mute state, then mute/unmute an individual tile. Confirm the override message disappears when the tile returns to the character default.
+7. Confirm the master player has **no separate Stop button** and still handles play/pause, previous/next, looping, and navigation.
 
-- Folder settings (⋯) now has **Export backup**. The export contains the chosen folder, its scenes, referenced characters, and all referenced recording audio as one JSON file.
-- On the home screen, tap **+ New folder → Import folder backup**. Import creates a separate folder with **(Imported)** in its name. Existing data is not replaced.
-- Version 5 can also recognize a Version 4 **whole-library** JSON backup and import its scenes as a new folder, without replacing other data. It does not reconstruct the original multi-folder layout from that older backup.
-- Backups may be large because they include audio. Keep them private.
-- Backup files are separate from local automatic saves. No internet connection is needed for creating scenes or editing recordings once the PWA's files are cached.
+## Limitations and privacy
 
-## Version 5 highlights
-
-- One **+ New scene** control per home-screen folder; each scene has its own ⋯ menu to rename, move, or delete it.
-- Folder settings has one close (×) control, not a duplicate Cancel button.
-- Sticky scene player includes **Top**, **Bottom**, and a line number field. When playback is paused or stopped, enter a number from 1 to the scene's total and confirm to move the playhead there. Playback stays stopped until you press Play.
-- Tap a tile's **timestamp** to replace the tile's contents with a non-destructive trim editor. Touch-drag the waveform's left/right handles to adjust In and Out points, view the second readouts, preview the selection, reset, or tap Done. Trim view retains the tile's previous screen height.
-- Tile controls use a consistent minimal icon style; red circle for Record and square for Stop.
-
-## Quick test checklist
-
-1. Create a new folder and scene; check only one New scene button is displayed.
-2. On the home screen, open that scene's ⋯ menu and rename or move it.
-3. Record a line and tap its timestamp. Drag both trim handles and tap Done.
-4. Replay the line to hear only the selected portion. Reopen Trim and tap Reset if needed.
-5. Tap Top and Bottom in the sticky playback bar.
-6. Pause scene playback; edit the current line number to jump to another line, then press Play.
-7. Export a folder backup; import it via New folder and verify the duplicate folder appears without removing the existing one.
-
-## Limitations
-
-- Microphone access requires HTTPS and Chrome permission. Android browser audio formats, decoding, pitch effects, and waveform generation vary by device.
-- Trim adjustments are rounded to tenths of a second and do not modify the source recording. Audio playback may have small seek latency.
-- Automatic transcription and text-to-speech remain removed.
-- The current pitch shifting and voice effects are experimental. Pitch shifting of very long clips can consume significant memory on a phone.
-- Export a backup before every substantial update.
+Android recording requires the app to be opened over **HTTPS** and microphone permission to be granted. The trimming editor's playback and pitch effects depend on browser audio-decoding support. Pitch shifting is experimental. Recordings, scripts, and settings are stored in the browser on your device; keep exported folder backups because browser storage can be cleared or evicted. No paid API, account, or server-side project storage is required.
