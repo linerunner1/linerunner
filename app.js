@@ -1,6 +1,6 @@
 'use strict';
 const $=id=>document.getElementById(id),uid=()=>crypto.randomUUID?.()||Date.now()+'-'+Math.random();
-const baseState=()=>({version:10,plays:[],scenes:[],characters:[],sounds:[],activeScene:null});
+const baseState=()=>({version:11,plays:[],scenes:[],characters:[],sounds:[],activeScene:null});
 let state=baseState(),db=null,saveTimer=null,toastTimer=null,recording=null,playing=null,playToken=0,paused=false,sceneRunning=false,scrollDisabledUntil=0,playingId=null,ticker=null,elapsed=0,selectedLine=0,trimOpenId=null,trimDraft=null,trimTileHeight=213,trimSession=null;
 const getScene=()=>state.scenes.find(s=>s.id===state.activeScene),getChar=id=>state.characters.find(c=>c.id===id),getSound=id=>state.sounds?.find(x=>x.id===id),isSfx=l=>l.type==='sfx',rawDuration=l=>Math.max(.1,Number(l.duration)||Math.max(2,Math.ceil((l.text||'').trim().split(/\s+/).filter(Boolean).length/2))),trimBounds=l=>{const total=rawDuration(l),a=Math.min(total-.05,Math.max(0,Number(l.trimStart)||0)),b=Math.max(a+.05,Math.min(total,Number(l.trimEnd)||total));return {start:a,end:b,total}},duration=l=>{const t=trimBounds(l);return t.end-t.start},stamp=v=>{let t=Math.max(0,Math.round(v||0));return String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0')},stampFine=v=>Number(v||0).toFixed(1)+'s';
 const make=(tag,cls='',text=null)=>{const x=document.createElement(tag);if(cls)x.className=cls;if(text!==null)x.textContent=text;return x};
@@ -74,7 +74,7 @@ function migrate(){
    if(l.muteOverride!=null&&!!l.muteOverride===!!getChar(l.characterId)?.muted)l.muteOverride=null;
   }
  }
- normalizeCharacterScopes();state.version=9;state.activeScene=null;
+ normalizeCharacterScopes();state.version=11;state.activeScene=null;
 }
 function findScopedCharacter(scene,name){return scopeCharIds(scene).map(id=>getChar(id)).find(c=>c&&sameName(c.name,name))||null}
 function moveSceneToScope(scene,newPlayId){
@@ -196,20 +196,49 @@ function insertTile(type,afterId=null){
 }
 function addNext(){insertTile('audio')}
 function newSoundTile(){insertTile('sfx')}
+function addFirstTile(){
+ const scene=getScene();if(!scene||scene.lines.length)return;
+ const body=make('div','folderChoice');
+ body.append(button('＋ Add Dialogue',()=>{closeModal();insertTile('audio')},'button primary'),
+  button('＋ Add Sound Effect',()=>{closeModal();insertTile('sfx')},'button ghost'));
+ modal('Add first tile',body);
+}
 function addTileAfter(lineId){
  const body=make('div','folderChoice');
  body.append(button('＋ Add Dialogue',()=>{closeModal();insertTile('audio',lineId)},'button primary'),
              button('≋ Add Sound Effect',()=>{closeModal();insertTile('sfx',lineId)},'button ghost'));
  modal('Insert tile after this one',body);
 }
+function soundOptions(line){
+ return [['','Choose sound effect…'],...(state.sounds||[]).map(sound=>[sound.id,sound.name]),['__new','＋ New sound effect']];
+}
 function chooseSound(lineId){
+ // Reuse the same native selector pattern as Choose Character.
  const scene=getScene(),line=scene?.lines.find(l=>l.id===lineId);if(!line)return;
- const body=make('div');const options=state.sounds.map(a=>[a.id,a.name+(a.audioId?' · '+stamp(a.duration):' · not recorded')]);
- if(options.length){const sel=dropdown(options,line.soundId||options[0][0]);body.append(field('Sound library',sel),actions(button('Use selected sound',()=>{assignSound(line,sel.value);closeModal()},'button primary')))}
- const name=textInput('','e.g. Phone ringing'),create=button('Create sound effect',()=>{if(!name.value.trim())return notify('Enter a sound effect name');const sound={id:uid(),name:name.value.trim(),audioId:null,duration:0};state.sounds.push(sound);assignSound(line,sound.id);closeModal();notify('Use Record or Import Audio to add the sound')},'button primary');
- body.append(field('New sound name',name),actions(create));
- if(line.soundId)body.append(button('Cancel',closeModal,'button ghost'));
- modal('Sound effect library',body);
+ const body=make('div'),sel=dropdown(soundOptions(line),line.soundId||'');
+ sel.onchange=()=>changeSound(lineId,sel.value);
+ body.append(field('Sound effect',sel));modal('Choose sound effect',body);
+}
+function changeSound(lineId,value){
+ if(value==='__new'){createSoundFromFile(lineId);return}
+ const line=getScene()?.lines.find(l=>l.id===lineId);if(!line)return;
+ if(!value){line.soundId=null;line.audioId=null;line.duration=0;line.trimStart=0;line.trimEnd=null;persist();renderTimeline();return}
+ assignSound(line,value);
+}
+function createSoundFromFile(lineId){
+ const line=getScene()?.lines.find(l=>l.id===lineId);if(!line)return;
+ const input=make('input');input.type='file';input.accept='audio/*,.mp3,.wav,.ogg,.m4a,.webm';
+ input.onchange=async()=>{
+  const file=input.files?.[0];if(!file)return;
+  const suggested=file.name.replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ').trim()||'New sound effect';
+  const value=prompt('Name this sound effect:',suggested);
+  if(value===null)return;
+  const name=value.trim();if(!name)return notify('A sound effect name is required');
+  const sound={id:uid(),name,audioId:null,duration:0};state.sounds.push(sound);
+  try{await saveSoundAudio(sound,file);const target=getScene()?.lines.find(l=>l.id===lineId);if(!target)throw Error('Sound effect tile no longer exists');assignSound(target,sound.id);closeModal();notify('Sound effect added to the library')}
+  catch(e){state.sounds=state.sounds.filter(x=>x.id!==sound.id);if(sound.audioId)await dbDelete('audio',sound.audioId).catch(()=>{});persist();renderTimeline();notify('Audio import failed: '+e.message)}
+ };
+ input.click();
 }
 function assignSound(line,soundId){
  const sound=getSound(soundId);if(!sound)return;
@@ -265,7 +294,7 @@ function characterSettings(id){
  const effect=dropdown([['none','Natural (no effect)'],['echo','Echo'],['reverb','Reverb'],['telephone','Telephone'],['robot','Robot'],['deep','Deep / dark'],['bright','Bright / thin']],c.effect||'none');
  body.append(row,pitchBox,field('Voice effect',effect));
  body.append(make('p','characterHelp','Effects are applied during playback; recordings stay unchanged. Character settings apply only to this '+(isPlay?'play.':'scene.')));
- body.append(actions(button('Cancel',closeModal),button('Save settings',()=>{
+ body.append(actions(button('Delete Character',()=>deleteCharacter(id),'button danger deleteCharacter'),button('Save settings',()=>{
   if(!name.value.trim())return notify('Enter a name');
   const collision=scopeCharIds(scene).filter(other=>other!==id).map(other=>getChar(other)).some(other=>other&&sameName(other.name,name.value));
   if(collision)return notify('That character name is already used in this '+(isPlay?'play':'scene')+'.');
@@ -275,20 +304,37 @@ function characterSettings(id){
  modal('Character settings',body);
 }
 
+async function deleteCharacter(id){
+ const c=getChar(id),current=getScene();if(!c||!current)return;
+ const scenes=scopedScenes(current),targets=[];
+ for(const scene of scenes)for(const line of scene.lines)if(!isSfx(line)&&line.characterId===id)targets.push({scene,line});
+ const recordingCount=targets.filter(x=>!!x.line.audioId).length;
+ const warning='Delete character "'+c.name+'" and '+targets.length+' dialogue '+(targets.length===1?'line':'lines')+' ('+recordingCount+' '+(recordingCount===1?'recording':'recordings')+') from this '+(current.playId?'play':'standalone scene')+'? This cannot be undone.';
+ if(!confirm(warning))return;
+ if(recording&&targets.some(x=>x.line.id===recording.lineId))return notify('Stop recording before deleting this character.');
+ stop();
+ const audios=new Set(targets.map(x=>x.line.audioId).filter(Boolean));
+ for(const scene of scenes){scene.lines=scene.lines.filter(line=>line.characterId!==id||isSfx(line));scene.cast=(scene.cast||[]).filter(cid=>cid!==id);if(scene.mutedCharacters)scene.mutedCharacters=scene.mutedCharacters.filter(cid=>cid!==id)}
+ // A character belongs to one play or standalone scene. Do not delete an ID that remains in another scope.
+ if(!state.scenes.some(scene=>scene.lines.some(line=>line.characterId===id)||scene.cast?.includes(id)))state.characters=state.characters.filter(char=>char.id!==id);
+ persist();closeModal();renderScene();
+ for(const audioId of audios){if(!state.scenes.some(scene=>scene.lines.some(line=>line.audioId===audioId)))await dbDelete('audio',audioId).catch(()=>{})}
+ notify('Character and associated dialogue deleted');
+}
+
 function renderSoundTile(tile,l,index,s){
  tile.classList.add('sfxTile');const sound=getSound(l.soundId),top=make('div','sfxTop');
- top.append(make('span','tileNum',String(index+1).padStart(2,'0')),make('span','sfxSymbol','≋'));
- const label=button(sound?.name||'Choose sound effect',()=>chooseSound(l.id),'sfxLabel');top.append(label);
+ top.append(make('span','tileNum',String(index+1).padStart(2,'0')));const symbol=make('span','sfxSymbol');symbol.innerHTML=svgIcon('audible');top.append(symbol);
+ const sel=dropdown(soundOptions(l),l.soundId||'');sel.classList.add('sfxSelect');sel.setAttribute('aria-label','Sound effect for tile '+(index+1));sel.onchange=()=>changeSound(l.id,sel.value);top.append(sel);
  const time=button(l.audioId?stamp(duration(l)):'00:00',()=>openTrim(l),'tileTime trimTrigger');time.disabled=!l.audioId;time.title=l.audioId?'Trim sound':'Record or import sound to trim';top.append(time);
  const del=button('×',()=>deleteLine(l.id),'iconBtn');del.title='Remove sound effect tile';top.append(del);tile.append(top);
  const ctr=make('div','tileControls sfxControls'),isRec=recording?.lineId===l.id,active=sceneRunning&&playingId===l.id&&!paused;
  const record=button('',()=>toggleRecording(l.id),'toolbtn record'+(isRec?' recording':''));record.innerHTML=svgIcon(isRec?'stop':'record');record.title=isRec?'Stop recording':'Record sound effect';
  const play=button('',()=>toggleLine(l.id),'toolbtn');play.innerHTML=svgIcon(active?'pause':'play');play.title='Play or pause sound';
  const replay=button('',()=>playLine(l.id),'toolbtn');replay.innerHTML=svgIcon('restart');replay.title='Replay sound';
- const imp=button('↥',()=>importSoundAudio(l.id),'toolbtn importSound');imp.title='Import audio file';
- ctr.append(record,play,replay,imp);
+ ctr.append(record,play,replay);
  const reorder=make('div','tileReorder'),add=button('+',()=>addTileAfter(l.id),'toolbtn insertTile'),up=button('↑',()=>moveLine(index,-1),'toolbtn'),down=button('↓',()=>moveLine(index,1),'toolbtn');add.title='Insert a tile after this effect';up.disabled=index===0;down.disabled=index===s.lines.length-1;reorder.append(add,up,down);ctr.append(reorder);tile.append(ctr);
- for(const el of [record,play,replay,imp,add,up,down])el.setAttribute('aria-label',el.title||'Reorder sound');
+ for(const el of [record,play,replay,add,up,down])el.setAttribute('aria-label',el.title||'Reorder sound');
  if(isRec)tile.append(make('div','tileNote','● Recording sound… tap stop to save'));
 }
 
@@ -296,7 +342,7 @@ function renderTimeline(){const s=getScene(),root=$('timeline');root.replaceChil
 if(isSfx(l)){renderSoundTile(tile,l,index,s);root.append(tile);continue}
 const sel=dropdown(speakerOptions(l),l.characterId||'');sel.setAttribute('aria-label','Character for line '+(index+1));sel.onchange=()=>changeSpeaker(l.id,sel.value);const box=make('div','speakerSelect');box.append(sel);top.append(box);const time=button(active?stamp(elapsed)+' / '+stamp(duration(l)):stamp(duration(l)),()=>openTrim(l),'tileTime trimTrigger');time.title=l.audioId?'Trim recording':'Record a line to enable trimming';time.disabled=!l.audioId;top.append(time);const removeLine=button('×',()=>deleteLine(l.id),'iconBtn');removeLine.title='Delete dialogue line';removeLine.setAttribute('aria-label','Delete line '+(index+1));top.append(removeLine);tile.append(top);
 if(!l.revealed){const reveal=button('◉ Reveal dialogue',()=>{l.revealed=true;persist();renderTimeline()},'reveal');tile.append(reveal)}else{const area=make('div','dialogueBox'),edit=make('textarea');edit.value=l.text||'';edit.placeholder='Double tap to enter text';edit.rows=2;edit.setAttribute('aria-label','Dialogue text, line '+(index+1));edit.oninput=()=>{l.text=edit.value;persist()};area.append(edit,button('Hide dialogue',()=>{l.revealed=false;persist();renderTimeline()},'hideText'));tile.append(area)}
-const controls=make('div','tileControls');let isRec=recording?.lineId===l.id,isPlaying=active&&!paused;const rec=button('',()=>toggleRecording(l.id),'toolbtn record'+(isRec?' recording':''));rec.innerHTML=isRec?svgIcon('stop'):svgIcon('record');rec.title=isRec?'Stop recording':'Record this line';rec.setAttribute('aria-label',rec.title);const play=button('',()=>toggleLine(l.id),'toolbtn');play.innerHTML=svgIcon(isPlaying?'pause':'play');play.title=isPlaying?'Pause line':'Play or resume line';const restart=button('',()=>playLine(l.id),'toolbtn');restart.innerHTML=svgIcon('restart');restart.title='Restart line';const muted=effectiveMute(l);const mute=button('',()=>muteLine(l),'toolbtn'+(muted?' activeMute':''));mute.innerHTML=svgIcon(muted?'muted':'audible');mute.title=muted?'Unmute this line':'Mute this line';for(const b of [play,restart,mute])b.setAttribute('aria-label',b.title);controls.append(rec,play,restart,mute);const reorder=make('div','tileReorder');const add=button('+',()=>addTileAfter(l.id),'toolbtn insertTile'),up=button('↑',()=>moveLine(index,-1),'toolbtn'),down=button('↓',()=>moveLine(index,1),'toolbtn');add.title='Insert a tile after this line';add.setAttribute('aria-label',add.title);up.disabled=index===0;down.disabled=index===s.lines.length-1;up.title='Move line up';down.title='Move line down';reorder.append(add,up,down);controls.append(reorder);tile.append(controls);if(isRec)tile.append(make('div','tileNote','● Recording… Tap stop to save automatically.'));if(l.muteOverride!==null&&l.muteOverride!==undefined&&!!l.muteOverride!==!!getChar(l.characterId)?.muted)tile.append(button('Mute override active · Reset to character setting',()=>{l.muteOverride=null;persist();renderTimeline()},'hideText'));root.append(tile)}if(!s.lines.length)root.append(make('div','note','No dialogue yet. Add a dialogue line or sound effect to begin.'))}
+const controls=make('div','tileControls');let isRec=recording?.lineId===l.id,isPlaying=active&&!paused;const rec=button('',()=>toggleRecording(l.id),'toolbtn record'+(isRec?' recording':''));rec.innerHTML=isRec?svgIcon('stop'):svgIcon('record');rec.title=isRec?'Stop recording':'Record this line';rec.setAttribute('aria-label',rec.title);const play=button('',()=>toggleLine(l.id),'toolbtn');play.innerHTML=svgIcon(isPlaying?'pause':'play');play.title=isPlaying?'Pause line':'Play or resume line';const restart=button('',()=>playLine(l.id),'toolbtn');restart.innerHTML=svgIcon('restart');restart.title='Restart line';const muted=effectiveMute(l);const mute=button('',()=>muteLine(l),'toolbtn'+(muted?' activeMute':''));mute.innerHTML=svgIcon(muted?'muted':'audible');mute.title=muted?'Unmute this line':'Mute this line';for(const b of [play,restart,mute])b.setAttribute('aria-label',b.title);controls.append(rec,play,restart,mute);const reorder=make('div','tileReorder');const add=button('+',()=>addTileAfter(l.id),'toolbtn insertTile'),up=button('↑',()=>moveLine(index,-1),'toolbtn'),down=button('↓',()=>moveLine(index,1),'toolbtn');add.title='Insert a tile after this line';add.setAttribute('aria-label',add.title);up.disabled=index===0;down.disabled=index===s.lines.length-1;up.title='Move line up';down.title='Move line down';reorder.append(add,up,down);controls.append(reorder);tile.append(controls);if(isRec)tile.append(make('div','tileNote','● Recording… Tap stop to save automatically.'));if(l.muteOverride!==null&&l.muteOverride!==undefined&&!!l.muteOverride!==!!getChar(l.characterId)?.muted)tile.append(button('Mute override active · Reset to character setting',()=>{l.muteOverride=null;persist();renderTimeline()},'hideText'));root.append(tile)}if(!s.lines.length){const empty=make('div','emptyScene');empty.append(make('p','note','This scene is empty.'));empty.append(button('＋ Add First Tile',()=>addFirstTile(),'button primary addFirstTile'));root.append(empty)}}
 function openTrim(line){if(!line.audioId)return;const existing=document.querySelector('.tile[data-id=\"'+line.id+'\"]');trimTileHeight=isSfx(line)?213:(existing?.getBoundingClientRect().height||213);stop();const b=trimBounds(line);trimDraft={start:b.start,end:b.end,total:b.total,head:b.start,previewPlaying:false};trimOpenId=line.id;renderTimeline();loadWaveform(line).catch(e=>notify('Waveform unavailable: '+e.message))}
 function finishTrim(line){stopTrimAudio();if(trimDraft){line.trimStart=trimDraft.start;line.trimEnd=trimDraft.end>=trimDraft.total-.05?null:trimDraft.end;persist()}trimOpenId=null;trimDraft=null;renderTimeline()}
 const waveformCache=new Map();
@@ -515,5 +561,5 @@ function jump(step){
  if(sceneRunning&&!paused)runSequence(target,true);
  else selectPausedLine(target);
 }
-async function init(){try{db=await openDB();const row=await dbGet('kv','main');if(row?.value?.scenes)state=row.value}catch(e){notify('Browser storage unavailable: '+e.message)}migrate();persist();$('homeBtn').onclick=openHome;$('createFolder').onclick=createFolder;$('createScene').onclick=()=>createScene(null);$('sceneMenu').onclick=()=>editScene();$('goTop').onclick=()=>{scrollDisabledUntil=Date.now()+15000;window.scrollTo({top:0,behavior:'smooth'})};$('goBottom').onclick=()=>{scrollDisabledUntil=Date.now()+15000;$('addNext').scrollIntoView({behavior:'smooth',block:'end'})};$('currentLine').addEventListener('change',setLinePosition);$('currentLine').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();setLinePosition();e.target.blur()}});$('masterPlay').onclick=()=>sceneRunning?pauseToggle():playScene();$('prev').onclick=()=>jump(-1);$('next').onclick=()=>jump(1);$('loop').onchange=e=>{getScene().loop=e.target.checked;persist()};$('addNext').onclick=addNext;$('addSound').onclick=newSoundTile;$('modalClose').onclick=closeModal;$('modalBackdrop').onclick=e=>{if(e.target===$('modalBackdrop'))closeModal()};document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('modalBackdrop').hidden)closeModal()});window.addEventListener('wheel',()=>{scrollDisabledUntil=Date.now()+2500},{passive:true});window.addEventListener('touchmove',()=>{scrollDisabledUntil=Date.now()+3000},{passive:true});render();if('serviceWorker'in navigator&&location.protocol!=='file:')navigator.serviceWorker.register('./sw.js').catch(()=>{});if(!window.isSecureContext)setTimeout(()=>notify('Use an HTTPS site on Android to enable recording.'),1600)}
+async function init(){try{db=await openDB();const row=await dbGet('kv','main');if(row?.value?.scenes)state=row.value}catch(e){notify('Browser storage unavailable: '+e.message)}migrate();persist();$('homeBtn').onclick=openHome;$('createFolder').onclick=createFolder;$('createScene').onclick=()=>createScene(null);$('sceneMenu').onclick=()=>editScene();$('goTop').onclick=()=>{scrollDisabledUntil=Date.now()+15000;window.scrollTo({top:0,behavior:'smooth'})};$('goBottom').onclick=()=>{scrollDisabledUntil=Date.now()+15000;$('timeline').scrollIntoView({behavior:'smooth',block:'end'})};$('currentLine').addEventListener('change',setLinePosition);$('currentLine').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();setLinePosition();e.target.blur()}});$('masterPlay').onclick=()=>sceneRunning?pauseToggle():playScene();$('prev').onclick=()=>jump(-1);$('next').onclick=()=>jump(1);$('loop').onchange=e=>{getScene().loop=e.target.checked;persist()};$('modalClose').onclick=closeModal;$('modalBackdrop').onclick=e=>{if(e.target===$('modalBackdrop'))closeModal()};document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('modalBackdrop').hidden)closeModal()});window.addEventListener('wheel',()=>{scrollDisabledUntil=Date.now()+2500},{passive:true});window.addEventListener('touchmove',()=>{scrollDisabledUntil=Date.now()+3000},{passive:true});render();if('serviceWorker'in navigator&&location.protocol!=='file:')navigator.serviceWorker.register('./sw.js').catch(()=>{});if(!window.isSecureContext)setTimeout(()=>notify('Use an HTTPS site on Android to enable recording.'),1600)}
 init();

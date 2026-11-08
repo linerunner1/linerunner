@@ -15,3 +15,10 @@ Use the same GitHub Pages address and retain browser site data to preserve the e
 
 ## Testing notes
 Syntax and ZIP checks can be performed without Android, but live microphone recording, audio playback, and service-worker update behavior need validation on an Android device.
+
+
+## Version 11
+- Character Settings: Delete Character replaces Cancel; the × closes settings. Deletion confirms the number of dialogue tiles and recordings to remove across the character's play (or standalone scene).
+- Sound effect selection now uses the same in-tile dropdown design as characters, including `＋ New sound effect` at the bottom. New opens the device's audio file picker, followed by an editable suggested sound name. The tile's extra Upload button was removed.
+- Sound effects use the simple speaker icon.
+- The bottom Add Tile buttons have been removed. An empty scene shows Add First Tile; subsequent insertions use each tile's + button.
