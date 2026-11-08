@@ -1,8 +1,8 @@
 'use strict';
 const $=id=>document.getElementById(id),uid=()=>crypto.randomUUID?.()||Date.now()+'-'+Math.random();
-const baseState=()=>({version:5,plays:[],scenes:[],characters:[],activeScene:null});
+const baseState=()=>({version:9,plays:[],scenes:[],characters:[],sounds:[],activeScene:null});
 let state=baseState(),db=null,saveTimer=null,toastTimer=null,recording=null,playing=null,playToken=0,paused=false,sceneRunning=false,scrollDisabledUntil=0,playingId=null,ticker=null,elapsed=0,selectedLine=0,trimOpenId=null,trimDraft=null,trimTileHeight=213,trimSession=null;
-const getScene=()=>state.scenes.find(s=>s.id===state.activeScene),getChar=id=>state.characters.find(c=>c.id===id),rawDuration=l=>Math.max(.1,Number(l.duration)||Math.max(2,Math.ceil((l.text||'').trim().split(/\s+/).filter(Boolean).length/2))),trimBounds=l=>{const total=rawDuration(l),a=Math.min(total-.05,Math.max(0,Number(l.trimStart)||0)),b=Math.max(a+.05,Math.min(total,Number(l.trimEnd)||total));return {start:a,end:b,total}},duration=l=>{const t=trimBounds(l);return t.end-t.start},stamp=v=>{let t=Math.max(0,Math.round(v||0));return String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0')},stampFine=v=>Number(v||0).toFixed(1)+'s';
+const getScene=()=>state.scenes.find(s=>s.id===state.activeScene),getChar=id=>state.characters.find(c=>c.id===id),getSound=id=>state.sounds?.find(x=>x.id===id),isSfx=l=>l.type==='sfx',rawDuration=l=>Math.max(.1,Number(l.duration)||Math.max(2,Math.ceil((l.text||'').trim().split(/\s+/).filter(Boolean).length/2))),trimBounds=l=>{const total=rawDuration(l),a=Math.min(total-.05,Math.max(0,Number(l.trimStart)||0)),b=Math.max(a+.05,Math.min(total,Number(l.trimEnd)||total));return {start:a,end:b,total}},duration=l=>{const t=trimBounds(l);return t.end-t.start},stamp=v=>{let t=Math.max(0,Math.round(v||0));return String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0')},stampFine=v=>Number(v||0).toFixed(1)+'s';
 const make=(tag,cls='',text=null)=>{const x=document.createElement(tag);if(cls)x.className=cls;if(text!==null)x.textContent=text;return x};
 const button=(name,cb,cls='button ghost')=>{const x=make('button',cls,name);x.type='button';x.onclick=cb;return x};
 const field=(name,control,help='')=>{const d=make('div','field');const l=make('label','',name);d.append(l,control);if(help)d.append(make('small','',help));return d};
@@ -57,7 +57,7 @@ function normalizeCharacterScopes(){
  }
 }
 function migrate(){
- state.plays||=[];state.scenes||=[];state.characters||=[];
+ state.plays||=[];state.scenes||=[];state.characters||=[];state.sounds||=[];
  const miscellaneous=new Set(state.plays.filter(p=>p.misc===true).map(p=>p.id));
  for(const scene of state.scenes){
   if(miscellaneous.has(scene.playId)||!state.plays.some(p=>p.id===scene.playId))scene.playId=null;
@@ -74,7 +74,7 @@ function migrate(){
    if(l.muteOverride!=null&&!!l.muteOverride===!!getChar(l.characterId)?.muted)l.muteOverride=null;
   }
  }
- normalizeCharacterScopes();state.version=8;state.activeScene=null;
+ normalizeCharacterScopes();state.version=9;state.activeScene=null;
 }
 function findScopedCharacter(scene,name){return scopeCharIds(scene).map(id=>getChar(id)).find(c=>c&&sameName(c.name,name))||null}
 function moveSceneToScope(scene,newPlayId){
@@ -102,7 +102,7 @@ function renderFolders(){
   const scenes=state.scenes.filter(s=>s.playId===p.id),box=make('section','folder'),head=make('div','folderHead');
   const toggle=button('',()=>{p.open=p.open===false;persist();renderFolders()},'folderToggle');
   toggle.append(make('span','symbol',p.open===false?'📁':'📂'));
-  const label=make('span');label.append(make('strong','',p.name),make('small','',scenes.length+' scene'+(scenes.length===1?'':'s')));
+  const label=make('span');label.append(make('strong','',p.name),make('small','',scenes.length+' scene'+(scenes.length===1?'':'s')+' · '+stamp(scenes.flatMap(s=>s.lines).reduce((n,l)=>n+(l.audioId?duration(l):0),0))));
   toggle.append(label);head.append(toggle);
   const edit=button('⋯',()=>editFolder(p.id),'iconBtn');edit.title='Play settings';edit.setAttribute('aria-label','Settings for '+p.name);
   head.append(edit);box.append(head);
@@ -116,7 +116,7 @@ function renderFolders(){
 }
 function sceneRow(s){
  const row=make('div','sceneRow');const link=button('',()=>openScene(s.id),'sceneLink');
- link.append(make('span','',s.name),make('small','',s.lines.length+' lines'));
+ link.append(make('span','',s.name),make('small','',s.lines.filter(l=>!isSfx(l)).length+' lines · '+s.lines.filter(isSfx).length+' effects'));
  const menu=button('⋯',()=>editScene(s.id),'iconBtn sceneMenuBtn');menu.title='Manage '+s.name;menu.setAttribute('aria-label','Settings for '+s.name);
  row.append(link,menu);return row;
 }
@@ -143,18 +143,18 @@ function editScene(sceneId=state.activeScene){
   const ids=s.lines.map(l=>l.audioId).filter(Boolean);state.scenes=state.scenes.filter(x=>x.id!==s.id);
   if(state.activeScene===s.id){stop();state.activeScene=null}
   persist();closeModal();render();
-  for(const id of ids){if(!state.scenes.some(scene=>scene.lines.some(l=>l.audioId===id)))await dbDelete('audio',id).catch(()=>{})}
+  for(const id of ids){if(!state.sounds.some(x=>x.audioId===id)&&!state.scenes.some(scene=>scene.lines.some(l=>l.audioId===id)))await dbDelete('audio',id).catch(()=>{})}
  },'button danger'),button('Save',()=>{
   if(!name.value.trim())return notify('Enter a scene name');
   moveSceneToScope(s,folder.value||null);s.name=name.value.trim();persist();closeModal();render();
  },'button primary')));
  modal('Scene settings',body);
 }
-function renderScene(){const s=getScene(),p=state.plays.find(p=>p.id===s.playId);$('breadcrumb').textContent=p?.name||'';$('breadcrumb').hidden=!p;$('sceneTitle').textContent=s.name;$('sceneSubtitle').textContent=s.lines.length+' dialogue lines';$('loop').checked=!!s.loop;updateSceneTotals();renderCast();renderTimeline();refreshPlayButtons()}
+function renderScene(){const s=getScene(),p=state.plays.find(p=>p.id===s.playId);$('breadcrumb').textContent=p?.name||'';$('breadcrumb').hidden=!p;$('sceneTitle').textContent=s.name;$('sceneSubtitle').textContent=s.lines.filter(l=>!isSfx(l)).length+' dialogue lines';$('loop').checked=!!s.loop;updateSceneTotals();renderCast();renderTimeline();refreshPlayButtons()}
 function updateSceneTotals(){
  const s=getScene();if(!s)return;
  const total=s.lines.reduce((sum,l)=>sum+(l.audioId?duration(l):0),0);
- $('lineCount').textContent=s.lines.length+' lines · '+stamp(total);
+ $('lineCount').textContent=s.lines.filter(l=>!isSfx(l)).length+' lines · '+s.lines.filter(isSfx).length+' effects · '+stamp(total);
 }
 function renderCast(){
  const s=getScene(),root=$('cast');root.replaceChildren();
@@ -180,6 +180,56 @@ function createCharacterForLine(lineId){
  },'button primary')));modal('New character',body);name.focus();
 }
 function addNext(){const s=getScene();s.lines.push({id:uid(),characterId:'',type:'audio',text:'',audioId:null,duration:0,revealed:false,muteOverride:null});persist();renderScene();document.querySelector('.tile:last-child')?.scrollIntoView({behavior:'smooth',block:'center'})}
+
+function newSoundTile(){
+ const scene=getScene();if(!scene)return;
+ const line={id:uid(),type:'sfx',soundId:null,characterId:'',text:'',audioId:null,duration:0,trimStart:0,trimEnd:null};
+ scene.lines.push(line);persist();renderScene();chooseSound(line.id);
+}
+function chooseSound(lineId){
+ const scene=getScene(),line=scene?.lines.find(l=>l.id===lineId);if(!line)return;
+ const body=make('div');const options=state.sounds.map(a=>[a.id,a.name+(a.audioId?' · '+stamp(a.duration):' · not recorded')]);
+ if(options.length){const sel=dropdown(options,line.soundId||options[0][0]);body.append(field('Sound library',sel),actions(button('Use selected sound',()=>{assignSound(line,sel.value);closeModal()},'button primary')))}
+ const name=textInput('','e.g. Phone ringing'),create=button('Create sound effect',()=>{if(!name.value.trim())return notify('Enter a sound effect name');const sound={id:uid(),name:name.value.trim(),audioId:null,duration:0};state.sounds.push(sound);assignSound(line,sound.id);closeModal();notify('Use Record or Import Audio to add the sound')},'button primary');
+ body.append(field('New sound name',name),actions(create));
+ if(line.soundId)body.append(button('Cancel',closeModal,'button ghost'));
+ modal('Sound effect library',body);
+}
+function assignSound(line,soundId){
+ const sound=getSound(soundId);if(!sound)return;
+ line.soundId=sound.id;line.audioId=sound.audioId;line.duration=sound.duration||0;line.trimStart=0;line.trimEnd=null;
+ persist();renderScene();
+}
+function propagateSound(soundId){
+ const sound=getSound(soundId);if(!sound)return;
+ for(const scene of state.scenes)for(const l of scene.lines){
+  if(!isSfx(l)||l.soundId!==soundId)continue;
+  l.audioId=sound.audioId;l.duration=sound.duration||0;
+  const b=trimBounds(l);l.trimStart=b.start;l.trimEnd=l.trimEnd==null?null:b.end;
+ }
+ persist();renderScene();
+}
+function audioLength(blob){return new Promise((resolve,reject)=>{
+ const a=new Audio(),url=URL.createObjectURL(blob);
+ a.preload='metadata';a.onloadedmetadata=()=>{const d=a.duration;URL.revokeObjectURL(url);resolve(Number.isFinite(d)&&d>0?d:0)};
+ a.onerror=()=>{URL.revokeObjectURL(url);reject(Error('Unable to read audio format'))};a.src=url;
+ })}
+async function saveSoundAudio(sound,blob){
+ const newId=uid(),oldId=sound.audioId;await dbPut('audio',{id:newId,blob});
+ sound.audioId=newId;sound.duration=await audioLength(blob).catch(()=>0)||Math.max(.1,Number(blob.recordedSeconds)||sound.duration||2);
+ waveformCache.delete(oldId);propagateSound(sound.id);
+ // Sound recordings are shared. Replacing one should not break any referenced tiles or backups.
+ if(oldId&&!state.sounds.some(x=>x.audioId===oldId)&&!state.scenes.some(s=>s.lines.some(l=>l.audioId===oldId)))await dbDelete('audio',oldId).catch(()=>{});
+}
+function importSoundAudio(lineId){
+ const line=getScene()?.lines.find(l=>l.id===lineId),sound=getSound(line?.soundId);if(!sound)return notify('Select or create an effect first');
+ const input=make('input');input.type='file';input.accept='audio/*,.mp3,.wav,.ogg,.m4a,.webm';
+ input.onchange=async()=>{const file=input.files?.[0];if(!file)return;
+  if(sound.audioId&&!confirm('Replace this sound in every scene that uses it?'))return;
+  try{await saveSoundAudio(sound,file);notify('Sound imported to shared library')}catch(e){notify('Import failed: '+e.message)}
+ };input.click();
+}
+
 function changeSpeaker(lineId,value){if(value==='__new')return createCharacterForLine(lineId);const l=getScene().lines.find(x=>x.id===lineId);if(!l)return;l.characterId=value;if(value&&!getScene().cast.includes(value))getScene().cast.push(value);persist();renderScene()}
 function effectiveMute(line){const c=getChar(line.characterId);return line.muteOverride===null||line.muteOverride===undefined?!!(c?.muted||getScene()?.mutedCharacters?.includes(line.characterId)):!!line.muteOverride}
 function muteLine(l){const requested=!effectiveMute(l);const characterDefault=!!getChar(l.characterId)?.muted;l.muteOverride=requested===characterDefault?null:requested;persist();renderTimeline()}
@@ -191,9 +241,7 @@ function characterSettings(id){
  const name=textInput(c.name),body=make('div'),mute=make('input');mute.type='checkbox';mute.checked=!!c.muted;
  body.append(field('Character name',name));
  const stats=make('div','characterStats');
- const stat=(label,value)=>{const cell=make('div','characterStat');cell.append(make('small','',label),make('strong','',String(value)));stats.append(cell)};
- if(isPlay)stat('Scenes',involved.length);
- stat('Lines',allLines.length);stat('Duration',stamp(totalTime));body.append(stats);
+ stats.textContent=(isPlay?involved.length+' scenes · ':'')+allLines.length+' lines · '+stamp(totalTime);body.append(stats);
  const row=make('div','muteRow');row.append(make('strong','', 'Mute character'),mute);
  const pitchBox=make('div','field'),pitchHead=make('div','rangeHead'),pitchLabel=make('label','','Pitch (semitones)'),out=make('output','',String(c.recordPitch||0));
  pitchHead.append(pitchLabel,out);const pitch=make('input','range');pitch.type='range';pitch.min=-6;pitch.max=6;pitch.step=1;pitch.value=c.recordPitch||0;
@@ -210,11 +258,30 @@ function characterSettings(id){
  },'button primary')));
  modal('Character settings',body);
 }
+
+function renderSoundTile(tile,l,index,s){
+ tile.classList.add('sfxTile');const sound=getSound(l.soundId),top=make('div','sfxTop');
+ top.append(make('span','tileNum',String(index+1).padStart(2,'0')),make('span','sfxSymbol','≋'));
+ const label=button(sound?.name||'Choose sound effect',()=>chooseSound(l.id),'sfxLabel');top.append(label);
+ const time=button(l.audioId?stamp(duration(l)):'00:00',()=>openTrim(l),'tileTime trimTrigger');time.disabled=!l.audioId;time.title=l.audioId?'Trim sound':'Record or import sound to trim';top.append(time);
+ const del=button('×',()=>deleteLine(l.id),'iconBtn');del.title='Remove sound effect tile';top.append(del);tile.append(top);
+ const ctr=make('div','tileControls sfxControls'),isRec=recording?.lineId===l.id,active=sceneRunning&&playingId===l.id&&!paused;
+ const record=button('',()=>toggleRecording(l.id),'toolbtn record'+(isRec?' recording':''));record.innerHTML=svgIcon(isRec?'stop':'record');record.title=isRec?'Stop recording':'Record sound effect';
+ const play=button('',()=>toggleLine(l.id),'toolbtn');play.innerHTML=svgIcon(active?'pause':'play');play.title='Play or pause sound';
+ const replay=button('',()=>playLine(l.id),'toolbtn');replay.innerHTML=svgIcon('restart');replay.title='Replay sound';
+ const imp=button('↥',()=>importSoundAudio(l.id),'toolbtn importSound');imp.title='Import audio file';
+ ctr.append(record,play,replay,imp);
+ const reorder=make('div','tileReorder'),up=button('↑',()=>moveLine(index,-1),'toolbtn'),down=button('↓',()=>moveLine(index,1),'toolbtn');up.disabled=index===0;down.disabled=index===s.lines.length-1;reorder.append(up,down);ctr.append(reorder);tile.append(ctr);
+ for(const el of [record,play,replay,imp,up,down])el.setAttribute('aria-label',el.title||'Reorder sound');
+ if(isRec)tile.append(make('div','tileNote','● Recording sound… tap stop to save'));
+}
+
 function renderTimeline(){const s=getScene(),root=$('timeline');root.replaceChildren();if(!s)return;updateSceneTotals();for(let index=0;index<s.lines.length;index++){const l=s.lines[index],active=playingId===l.id&&(sceneRunning||paused),tile=make('article','tile'+(active?' active':''));tile.dataset.id=l.id;tile.classList.toggle('trimMode',trimOpenId===l.id);if(trimOpenId===l.id){tile.style.height=trimTileHeight+'px';tile.style.minHeight=trimTileHeight+'px';tile.style.maxHeight=trimTileHeight+'px'}const top=make('div','tileTop');top.append(make('span','tileNum',String(index+1).padStart(2,'0')));if(trimOpenId===l.id){const label=make('strong','trimTitle','Trim recording');top.append(label);const done=button('Done',()=>finishTrim(l),'button ghost small');top.append(done);tile.append(top);renderTrimContents(tile,l);root.append(tile);continue}
+if(isSfx(l)){renderSoundTile(tile,l,index,s);root.append(tile);continue}
 const sel=dropdown(speakerOptions(l),l.characterId||'');sel.setAttribute('aria-label','Character for line '+(index+1));sel.onchange=()=>changeSpeaker(l.id,sel.value);const box=make('div','speakerSelect');box.append(sel);top.append(box);const time=button(active?stamp(elapsed)+' / '+stamp(duration(l)):stamp(duration(l)),()=>openTrim(l),'tileTime trimTrigger');time.title=l.audioId?'Trim recording':'Record a line to enable trimming';time.disabled=!l.audioId;top.append(time);const removeLine=button('×',()=>deleteLine(l.id),'iconBtn');removeLine.title='Delete dialogue line';removeLine.setAttribute('aria-label','Delete line '+(index+1));top.append(removeLine);tile.append(top);
 if(!l.revealed){const reveal=button('◉ Reveal dialogue',()=>{l.revealed=true;persist();renderTimeline()},'reveal');tile.append(reveal)}else{const area=make('div','dialogueBox'),edit=make('textarea');edit.value=l.text||'';edit.placeholder='Double tap to enter text';edit.rows=2;edit.setAttribute('aria-label','Dialogue text, line '+(index+1));edit.oninput=()=>{l.text=edit.value;persist()};area.append(edit,button('Hide dialogue',()=>{l.revealed=false;persist();renderTimeline()},'hideText'));tile.append(area)}
-const controls=make('div','tileControls');let isRec=recording?.lineId===l.id,isPlaying=active&&!paused;const rec=button('',()=>toggleRecording(l.id),'toolbtn record'+(isRec?' recording':''));rec.innerHTML=isRec?svgIcon('stop'):svgIcon('record');rec.title=isRec?'Stop recording':'Record this line';rec.setAttribute('aria-label',rec.title);const play=button('',()=>toggleLine(l.id),'toolbtn');play.innerHTML=svgIcon(isPlaying?'pause':'play');play.title=isPlaying?'Pause line':'Play or resume line';const restart=button('',()=>playLine(l.id),'toolbtn');restart.innerHTML=svgIcon('restart');restart.title='Restart line';const muted=effectiveMute(l);const mute=button('',()=>muteLine(l),'toolbtn'+(muted?' activeMute':''));mute.innerHTML=svgIcon(muted?'muted':'audible');mute.title=muted?'Unmute this line':'Mute this line';for(const b of [play,restart,mute])b.setAttribute('aria-label',b.title);controls.append(rec,play,restart,mute);const reorder=make('div','tileReorder');const up=button('↑',()=>moveLine(index,-1),'toolbtn'),down=button('↓',()=>moveLine(index,1),'toolbtn');up.disabled=index===0;down.disabled=index===s.lines.length-1;up.title='Move line up';down.title='Move line down';reorder.append(up,down);controls.append(reorder);tile.append(controls);if(isRec)tile.append(make('div','tileNote','● Recording… Tap stop to save automatically.'));if(l.muteOverride!==null&&l.muteOverride!==undefined&&!!l.muteOverride!==!!getChar(l.characterId)?.muted)tile.append(button('Mute override active · Reset to character setting',()=>{l.muteOverride=null;persist();renderTimeline()},'hideText'));root.append(tile)}if(!s.lines.length)root.append(make('div','note','No dialogue yet. Tap + Add Next Line to begin.'))}
-function openTrim(line){if(!line.audioId)return;const existing=document.querySelector('.tile[data-id=\"'+line.id+'\"]');trimTileHeight=existing?.getBoundingClientRect().height||213;stop();const b=trimBounds(line);trimDraft={start:b.start,end:b.end,total:b.total,head:b.start,previewPlaying:false};trimOpenId=line.id;renderTimeline();loadWaveform(line).catch(e=>notify('Waveform unavailable: '+e.message))}
+const controls=make('div','tileControls');let isRec=recording?.lineId===l.id,isPlaying=active&&!paused;const rec=button('',()=>toggleRecording(l.id),'toolbtn record'+(isRec?' recording':''));rec.innerHTML=isRec?svgIcon('stop'):svgIcon('record');rec.title=isRec?'Stop recording':'Record this line';rec.setAttribute('aria-label',rec.title);const play=button('',()=>toggleLine(l.id),'toolbtn');play.innerHTML=svgIcon(isPlaying?'pause':'play');play.title=isPlaying?'Pause line':'Play or resume line';const restart=button('',()=>playLine(l.id),'toolbtn');restart.innerHTML=svgIcon('restart');restart.title='Restart line';const muted=effectiveMute(l);const mute=button('',()=>muteLine(l),'toolbtn'+(muted?' activeMute':''));mute.innerHTML=svgIcon(muted?'muted':'audible');mute.title=muted?'Unmute this line':'Mute this line';for(const b of [play,restart,mute])b.setAttribute('aria-label',b.title);controls.append(rec,play,restart,mute);const reorder=make('div','tileReorder');const up=button('↑',()=>moveLine(index,-1),'toolbtn'),down=button('↓',()=>moveLine(index,1),'toolbtn');up.disabled=index===0;down.disabled=index===s.lines.length-1;up.title='Move line up';down.title='Move line down';reorder.append(up,down);controls.append(reorder);tile.append(controls);if(isRec)tile.append(make('div','tileNote','● Recording… Tap stop to save automatically.'));if(l.muteOverride!==null&&l.muteOverride!==undefined&&!!l.muteOverride!==!!getChar(l.characterId)?.muted)tile.append(button('Mute override active · Reset to character setting',()=>{l.muteOverride=null;persist();renderTimeline()},'hideText'));root.append(tile)}if(!s.lines.length)root.append(make('div','note','No dialogue yet. Add a dialogue line or sound effect to begin.'))}
+function openTrim(line){if(!line.audioId)return;const existing=document.querySelector('.tile[data-id=\"'+line.id+'\"]');trimTileHeight=isSfx(line)?213:(existing?.getBoundingClientRect().height||213);stop();const b=trimBounds(line);trimDraft={start:b.start,end:b.end,total:b.total,head:b.start,previewPlaying:false};trimOpenId=line.id;renderTimeline();loadWaveform(line).catch(e=>notify('Waveform unavailable: '+e.message))}
 function finishTrim(line){stopTrimAudio();if(trimDraft){line.trimStart=trimDraft.start;line.trimEnd=trimDraft.end>=trimDraft.total-.05?null:trimDraft.end;persist()}trimOpenId=null;trimDraft=null;renderTimeline()}
 const waveformCache=new Map();
 async function loadWaveform(line){const id=line.audioId;let peaks=waveformCache.get(id);if(!peaks){const row=await dbGet('audio',id);if(!row?.blob)return;const ctx=new (window.AudioContext||window.webkitAudioContext)();try{const decoded=await ctx.decodeAudioData(await row.blob.arrayBuffer());const data=decoded.getChannelData(0),bins=100;peaks=Array.from({length:bins},(_,i)=>{const a=Math.floor(i*data.length/bins),b=Math.floor((i+1)*data.length/bins);let max=0;for(let j=a;j<b;j+=Math.max(1,Math.floor((b-a)/64)))max=Math.max(max,Math.abs(data[j]));return max});waveformCache.set(id,peaks)}finally{ctx.close().catch(()=>{})}}if(trimOpenId===line.id){const canvas=document.querySelector('.trimWave');if(canvas)drawTrimWave(canvas,peaks)}}
@@ -297,9 +364,9 @@ async function startTrimPlayback(line,d,control,redraw,fromStart){
   try{await audio.play();if(trimSession!==session)return;d.previewPlaying=true;control.innerHTML=svgIcon('pause')}catch(e){complete();notify('Audio preview unavailable: '+e.message)}
  }catch(e){notify('Audio preview failed: '+e.message)}
 }
-async function deleteLine(id){const s=getScene(),l=s.lines.find(x=>x.id===id);if(!l)return;if(!confirm('Delete this dialogue tile'+(l.audioId?' and its recording':'')+'?'))return;if(recording?.lineId===id){notify('Stop recording before deleting.');return}stop();s.lines=s.lines.filter(x=>x.id!==id);persist();renderScene();if(l.audioId)await dbDelete('audio',l.audioId).catch(()=>{})}
+async function deleteLine(id){const s=getScene(),l=s.lines.find(x=>x.id===id);if(!l)return;if(!confirm(isSfx(l)?'Remove this effect from this scene? The shared recording stays in your sound library.':'Delete this dialogue tile'+(l.audioId?' and its recording':'')+'?'))return;if(recording?.lineId===id){notify('Stop recording before deleting.');return}stop();s.lines=s.lines.filter(x=>x.id!==id);persist();renderScene();if(l.audioId&&!isSfx(l))await dbDelete('audio',l.audioId).catch(()=>{})}
 function moveLine(index,step){const s=getScene(),target=index+step;if(target<0||target>=s.lines.length)return;stop();[s.lines[index],s.lines[target]]=[s.lines[target],s.lines[index]];persist();renderScene()}
-async function toggleRecording(lineId){if(recording){if(recording.lineId===lineId){recording.recorder.stop();return}return notify('Stop the current recording first.')}const l=getScene().lines.find(x=>x.id===lineId);if(!l)return;if(!l.characterId)return notify('Choose a character first.');if(l.audioId&&!confirm('Replace the existing recording for this line? This cannot be undone.'))return;stop();if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder)return notify('Recording requires Android Chrome over HTTPS.');try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});const rec=new MediaRecorder(stream),chunks=[],start=performance.now();recording={lineId,recorder:rec,stream};rec.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};rec.onstop=async()=>{stream.getTracks().forEach(t=>t.stop());const elapsed=(performance.now()-start)/1000,blob=new Blob(chunks,{type:rec.mimeType||'audio/webm'});recording=null;try{if(!blob.size)throw Error('Empty recording');const newId=uid();await dbPut('audio',{id:newId,blob});const oldId=l.audioId;l.audioId=newId;l.duration=elapsed;l.trimStart=0;l.trimEnd=null;waveformCache.delete(oldId);l.type='audio';persist();if(oldId)await dbDelete('audio',oldId).catch(()=>{});notify('Recording saved')}catch(e){notify('Recording failed: '+e.message)}renderTimeline()};rec.onerror=()=>notify('Recording error. Please try again.');rec.start(250);renderTimeline()}catch(e){notify('Microphone unavailable: '+e.message)}}
+async function toggleRecording(lineId){if(recording){if(recording.lineId===lineId){recording.recorder.stop();return}return notify('Stop the current recording first.')}const l=getScene().lines.find(x=>x.id===lineId);if(!l)return;if(isSfx(l)&&!getSound(l.soundId))return notify('Select a sound effect first.');if(!isSfx(l)&&!l.characterId)return notify('Choose a character first.');if(l.audioId&&!confirm(isSfx(l)?'Replace this shared sound recording in every scene that uses it?':'Replace the existing recording for this line? This cannot be undone.'))return;stop();if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder)return notify('Recording requires Android Chrome over HTTPS.');try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});const rec=new MediaRecorder(stream),chunks=[],start=performance.now();recording={lineId,recorder:rec,stream};rec.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};rec.onstop=async()=>{stream.getTracks().forEach(t=>t.stop());const elapsed=(performance.now()-start)/1000,blob=new Blob(chunks,{type:rec.mimeType||'audio/webm'});recording=null;try{if(!blob.size)throw Error('Empty recording');if(isSfx(l)){blob.recordedSeconds=elapsed;await saveSoundAudio(getSound(l.soundId),blob);notify('Sound recorded and saved to shared library')}else{const newId=uid();await dbPut('audio',{id:newId,blob});const oldId=l.audioId;l.audioId=newId;l.duration=elapsed;l.trimStart=0;l.trimEnd=null;waveformCache.delete(oldId);l.type='audio';persist();if(oldId)await dbDelete('audio',oldId).catch(()=>{});notify('Recording saved')}}catch(e){notify('Recording failed: '+e.message)}renderTimeline()};rec.onerror=()=>notify('Recording error. Please try again.');rec.start(250);renderTimeline()}catch(e){notify('Microphone unavailable: '+e.message)}}
 function stop(){stopTrimAudio();if(playingId&&getScene()){const i=getScene().lines.findIndex(l=>l.id===playingId);if(i>=0)selectedLine=i}clearInterval(ticker);ticker=null;playToken++;sceneRunning=false;paused=false;playingId=null;elapsed=0;if(playing?.audio){playing.audio.pause();playing.audio.removeAttribute('src');playing.audio.load();playing.finish?.()}if(playing?.url)URL.revokeObjectURL(playing.url);if(playing?.context)playing.context.close().catch(()=>{});playing=null;refreshPlayButtons();if(getScene())renderTimeline()}
 function refreshPlayButtons(){const s=getScene();$('masterPlay').textContent=sceneRunning?(paused?'▶ Resume':'Ⅱ Pause'):'▶ Play';if(!s)return;const found=s.lines.findIndex(l=>l.id===playingId);if(sceneRunning&&found>=0)selectedLine=found;const input=$('currentLine');input.disabled=!!(sceneRunning&&!paused);if(document.activeElement!==input){input.value=s.lines.length?String(selectedLine+1):'0'}$('lineTotal').textContent='/ '+s.lines.length}
 function selectPausedLine(index){
@@ -326,7 +393,7 @@ function playScene(start=selectedLine){const s=getScene();if(!s?.lines.length)re
 function playLine(id){const index=getScene()?.lines.findIndex(l=>l.id===id);if(index>=0)runSequence(index,false)}
 function activeFollow(){if(Date.now()<scrollDisabledUntil)return;const tile=document.querySelector('.tile.active');if(!tile)return;const rect=tile.getBoundingClientRect(),margin=$('master').getBoundingClientRect().bottom+12;if(rect.top<margin||rect.bottom>window.innerHeight-18)window.scrollTo({top:window.scrollY+rect.top-margin,behavior:'smooth'})}
 async function silentWait(ms,token){let left=ms,last=performance.now();while(left>0&&token===playToken){await new Promise(r=>setTimeout(r,65));const now=performance.now();if(!paused)left-=now-last;last=now}}
-async function runSequence(start,continuous){stop();const token=playToken,s=getScene();sceneRunning=true;let index=start;while(token===playToken){const l=s.lines[index];if(!l)break;playingId=l.id;elapsed=0;clearInterval(ticker);ticker=setInterval(()=>{if(!sceneRunning||paused||playingId!==l.id)return;elapsed=playing?.audio?Math.max(0,playing.audio.currentTime-trimBounds(l).start):Math.min(duration(l),elapsed+.1);const el=document.querySelector('.tile.active .tileTime');if(el)el.textContent=stamp(elapsed)+' / '+stamp(duration(l))},100);refreshPlayButtons();renderTimeline();activeFollow();if(effectiveMute(l)||!l.audioId){await silentWait(duration(l)*1000,token)}else{await playRecorded(l,token)}if(token!==playToken)break;if(!continuous)break;index++;if(index>=s.lines.length){if(s.loop)index=0;else break}}if(token===playToken)stop()}
+async function runSequence(start,continuous){stop();const token=playToken,s=getScene();sceneRunning=true;let index=start;while(token===playToken){const l=s.lines[index];if(!l)break;playingId=l.id;elapsed=0;clearInterval(ticker);ticker=setInterval(()=>{if(!sceneRunning||paused||playingId!==l.id)return;elapsed=playing?.audio?Math.max(0,playing.audio.currentTime-trimBounds(l).start):Math.min(duration(l),elapsed+.1);const el=document.querySelector('.tile.active .tileTime');if(el)el.textContent=stamp(elapsed)+' / '+stamp(duration(l))},100);refreshPlayButtons();renderTimeline();activeFollow();if((!isSfx(l)&&effectiveMute(l))||!l.audioId){await silentWait(duration(l)*1000,token)}else{await playRecorded(l,token)}if(token!==playToken)break;if(!continuous)break;index++;if(index>=s.lines.length){if(s.loop)index=0;else break}}if(token===playToken)stop()}
 
 async function pitchProcessedUrl(blob,semitones){
  if(!semitones)return null;
@@ -363,9 +430,45 @@ async function pitchProcessedUrl(blob,semitones){
 function downloadJson(obj,filename){const b=new Blob([JSON.stringify(obj)],{type:'application/json'}),url=URL.createObjectURL(b),a=document.createElement('a');a.href=url;a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),4000)}
 async function encodeBlob(blob){const bytes=new Uint8Array(await blob.arrayBuffer());let binary='';for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));return btoa(binary)}
 function decodeBlob(a){const raw=atob(a.base64),bytes=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);return new Blob([bytes],{type:a.type||'audio/webm'})}
-async function exportFolderBackup(id){const folder=state.plays.find(p=>p.id===id);if(!folder)return;const scenes=state.scenes.filter(s=>s.playId===id);const charIds=new Set(scenes.flatMap(s=>[...s.cast,...s.lines.map(l=>l.characterId)]));const chars=state.characters.filter(c=>charIds.has(c.id));const audioIds=[...new Set(scenes.flatMap(s=>s.lines.map(l=>l.audioId)).filter(Boolean))];const audios=[];for(const aid of audioIds){const r=await dbGet('audio',aid);if(r?.blob)audios.push({id:aid,type:r.blob.type,base64:await encodeBlob(r.blob)})}downloadJson({format:'LineRunner Folder Backup v1',exportedAt:new Date().toISOString(),folder,scenes,characters:chars,audios},folder.name.replace(/[^a-z0-9-_]+/gi,'-')+'-LineRunner-backup.json');notify('Folder backup downloaded')}
+async function exportFolderBackup(id){const folder=state.plays.find(p=>p.id===id);if(!folder)return;const scenes=state.scenes.filter(s=>s.playId===id);const charIds=new Set(scenes.flatMap(s=>[...s.cast,...s.lines.map(l=>l.characterId)]));const chars=state.characters.filter(c=>charIds.has(c.id));const soundIds=new Set(scenes.flatMap(s=>s.lines.filter(isSfx).map(l=>l.soundId)));const sounds=state.sounds.filter(sound=>soundIds.has(sound.id));const audioIds=[...new Set([...scenes.flatMap(s=>s.lines.map(l=>l.audioId)),...sounds.map(x=>x.audioId)].filter(Boolean))];const audios=[];for(const aid of audioIds){const r=await dbGet('audio',aid);if(r?.blob)audios.push({id:aid,type:r.blob.type,base64:await encodeBlob(r.blob)})}downloadJson({format:'LineRunner Folder Backup v1',exportedAt:new Date().toISOString(),folder,scenes,characters:chars,sounds,audios},folder.name.replace(/[^a-z0-9-_]+/gi,'-')+'-LineRunner-backup.json');notify('Folder backup downloaded')}
 function chooseFolderBackup(){const body=make('div');body.append(make('p','note','Import adds a separate folder without replacing existing scenes. Older whole-library backups can also be imported as separate folders.'));const file=make('input');file.type='file';file.accept='.json,application/json';file.onchange=async()=>{if(!file.files?.[0])return;await importFolderBackup(file.files[0])};body.append(field('Choose backup file',file));modal('Import folder backup',body)}
-async function importFolderBackup(file){let data;try{data=JSON.parse(await file.text());if(data.format==='LineRunner Backup v1'){const folder=data.state?.plays?.find(p=>p.id===data.state.scenes?.[0]?.playId)||{id:uid(),name:'Imported library'};data={format:'LineRunner Folder Backup v1',folder,scenes:data.state.scenes||[],characters:data.state.characters||[],audios:data.audios||[]}}if(data.format!=='LineRunner Folder Backup v1'||!data.folder||!Array.isArray(data.scenes)||!Array.isArray(data.characters)||!Array.isArray(data.audios))throw Error('Unsupported backup format');if(data.audios.some(a=>typeof a.base64!=='string'))throw Error('Invalid audio data')}catch(e){return notify('Cannot import backup: '+e.message)}const charMap=new Map(),audioMap=new Map();const importId=uid(),newFolder={id:importId,name:data.folder.name+' (Imported)',open:true};const chars=data.characters.map(c=>{const id=uid();charMap.set(c.id,id);return {...c,id}});const audios=data.audios.map(a=>{const id=uid();audioMap.set(a.id,id);return {id,blob:decodeBlob(a)}});const scenes=data.scenes.map(s=>({...s,id:uid(),playId:importId,cast:(s.cast||[]).map(id=>charMap.get(id)).filter(Boolean),lines:(s.lines||[]).map(l=>({...l,id:uid(),characterId:charMap.get(l.characterId)||'',audioId:audioMap.get(l.audioId)||null}))}));try{for(const a of audios)await dbPut('audio',a);state.plays.push(newFolder);state.characters.push(...chars);state.scenes.push(...scenes);normalizeCharacterScopes();await dbPut('kv',{key:'main',value:state});closeModal();render();notify('Folder imported without replacing existing work')}catch(e){notify('Import failed: '+e.message)}}
+async function importFolderBackup(file){
+ let data;
+ try{
+  data=JSON.parse(await file.text());
+  if(data.format==='LineRunner Backup v1'){
+   const folder=data.state?.plays?.find(p=>p.id===data.state.scenes?.[0]?.playId)||{id:uid(),name:'Imported library'};
+   data={format:'LineRunner Folder Backup v1',folder,scenes:data.state.scenes||[],characters:data.state.characters||[],sounds:data.state.sounds||[],audios:data.audios||[]};
+  }
+  if(data.format!=='LineRunner Folder Backup v1'||!data.folder||!Array.isArray(data.scenes)||!Array.isArray(data.characters)||!Array.isArray(data.audios))throw Error('Unsupported backup format');
+  if(data.audios.some(a=>typeof a.base64!=='string'))throw Error('Invalid audio data');
+ }catch(e){return notify('Cannot import backup: '+e.message)}
+ const charMap=new Map(),audioMap=new Map(),soundMap=new Map(),importId=uid();
+ const newFolder={id:importId,name:data.folder.name+' (Imported)',open:true};
+ const chars=data.characters.map(c=>{const id=uid();charMap.set(c.id,id);return {...c,id}});
+ const audios=[];
+ // Byte-identical audio is reused, not imported again. This is independent of its label.
+ const hash=async blob=>{const digest=await crypto.subtle.digest('SHA-256',await blob.arrayBuffer());return Array.from(new Uint8Array(digest)).map(v=>v.toString(16).padStart(2,'0')).join('')};
+ const currentHashes=new Map();
+ try{
+  const old=await dbAll('audio');
+  for(const entry of old)if(entry.blob)currentHashes.set(await hash(entry.blob),entry.id);
+  for(const a of data.audios){const blob=decodeBlob(a),digest=await hash(blob);let id=currentHashes.get(digest);if(!id){id=uid();audios.push({id,blob});currentHashes.set(digest,id)}audioMap.set(a.id,id)}
+ }catch(e){return notify('Unable to prepare audio import: '+e.message)}
+ const sounds=[];
+ for(const sound of data.sounds||[]){
+  const audioId=audioMap.get(sound.audioId)||null;
+  const existing=state.sounds.find(x=>x.audioId&&x.audioId===audioId);
+  if(existing){soundMap.set(sound.id,existing.id);continue}
+  const id=uid();soundMap.set(sound.id,id);sounds.push({...sound,id,audioId});
+ }
+ const scenes=data.scenes.map(s=>({...s,id:uid(),playId:importId,cast:(s.cast||[]).map(id=>charMap.get(id)).filter(Boolean),lines:(s.lines||[]).map(l=>({...l,id:uid(),characterId:isSfx(l)?'':charMap.get(l.characterId)||'',soundId:isSfx(l)?soundMap.get(l.soundId)||null:undefined,audioId:audioMap.get(l.audioId)||null}))}));
+ try{
+  for(const a of audios)await dbPut('audio',a);
+  state.plays.push(newFolder);state.characters.push(...chars);state.sounds.push(...sounds);state.scenes.push(...scenes);
+  normalizeCharacterScopes();await dbPut('kv',{key:'main',value:state});closeModal();render();notify('Folder imported without replacing existing work');
+ }catch(e){notify('Import failed: '+e.message)}
+}
 async function playRecorded(l,token){let obj;try{obj=await dbGet('audio',l.audioId)}catch(e){notify('Recording unavailable: '+e.message);return}if(!obj?.blob||token!==playToken)return;let url=URL.createObjectURL(obj.blob);const c=getChar(l.characterId)||{};if(c.recordPitch){try{const processed=await pitchProcessedUrl(obj.blob,Math.max(-6,Math.min(6,c.recordPitch)));if(processed){URL.revokeObjectURL(url);url=processed}}catch(e){notify('Pitch processing unavailable; natural pitch used')}}if(token!==playToken){URL.revokeObjectURL(url);return}
 const a=new Audio(url);a.preload='auto';const bounds=trimBounds(l);const session={audio:a,url,context:null};playing=session;const effect=c.effect||'none';try{if(effect!=='none')session.context=attachEffect(a,effect)}catch(e){console.warn(e)}const result=await new Promise(resolve=>{let done=false;const finish=()=>{if(done)return;done=true;resolve()};session.finish=finish;a.onended=finish;a.onerror=finish;a.ontimeupdate=()=>{if(a.currentTime>=bounds.end-.025)finish()};const start=()=>{if(token!==playToken)return finish();if(paused){setTimeout(start,80);return}if(a.currentTime<bounds.start)a.currentTime=bounds.start;a.play().catch(e=>{notify('Audio could not play: '+e.message);finish()})};start()});a.pause();a.removeAttribute('src');a.load();URL.revokeObjectURL(url);session.context?.close().catch(()=>{});if(playing===session)playing=null;return result}
 function attachEffect(a,effect){const Ctx=window.AudioContext||window.webkitAudioContext;if(!Ctx)return null;const ctx=new Ctx(),source=ctx.createMediaElementSource(a),gain=ctx.createGain();gain.gain.value=.8;let node=source;
@@ -381,5 +484,5 @@ function jump(step){
  if(sceneRunning&&!paused)runSequence(target,true);
  else selectPausedLine(target);
 }
-async function init(){try{db=await openDB();const row=await dbGet('kv','main');if(row?.value?.scenes)state=row.value}catch(e){notify('Browser storage unavailable: '+e.message)}migrate();persist();$('homeBtn').onclick=openHome;$('createFolder').onclick=createFolder;$('createScene').onclick=()=>createScene(null);$('sceneMenu').onclick=()=>editScene();$('goTop').onclick=()=>{scrollDisabledUntil=Date.now()+15000;window.scrollTo({top:0,behavior:'smooth'})};$('goBottom').onclick=()=>{scrollDisabledUntil=Date.now()+15000;$('addNext').scrollIntoView({behavior:'smooth',block:'end'})};$('currentLine').addEventListener('change',setLinePosition);$('currentLine').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();setLinePosition();e.target.blur()}});$('masterPlay').onclick=()=>sceneRunning?pauseToggle():playScene();$('prev').onclick=()=>jump(-1);$('next').onclick=()=>jump(1);$('loop').onchange=e=>{getScene().loop=e.target.checked;persist()};$('addNext').onclick=addNext;$('modalClose').onclick=closeModal;$('modalBackdrop').onclick=e=>{if(e.target===$('modalBackdrop'))closeModal()};document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('modalBackdrop').hidden)closeModal()});window.addEventListener('wheel',()=>{scrollDisabledUntil=Date.now()+2500},{passive:true});window.addEventListener('touchmove',()=>{scrollDisabledUntil=Date.now()+3000},{passive:true});render();if('serviceWorker'in navigator&&location.protocol!=='file:')navigator.serviceWorker.register('./sw.js').catch(()=>{});if(!window.isSecureContext)setTimeout(()=>notify('Use an HTTPS site on Android to enable recording.'),1600)}
+async function init(){try{db=await openDB();const row=await dbGet('kv','main');if(row?.value?.scenes)state=row.value}catch(e){notify('Browser storage unavailable: '+e.message)}migrate();persist();$('homeBtn').onclick=openHome;$('createFolder').onclick=createFolder;$('createScene').onclick=()=>createScene(null);$('sceneMenu').onclick=()=>editScene();$('goTop').onclick=()=>{scrollDisabledUntil=Date.now()+15000;window.scrollTo({top:0,behavior:'smooth'})};$('goBottom').onclick=()=>{scrollDisabledUntil=Date.now()+15000;$('addNext').scrollIntoView({behavior:'smooth',block:'end'})};$('currentLine').addEventListener('change',setLinePosition);$('currentLine').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();setLinePosition();e.target.blur()}});$('masterPlay').onclick=()=>sceneRunning?pauseToggle():playScene();$('prev').onclick=()=>jump(-1);$('next').onclick=()=>jump(1);$('loop').onchange=e=>{getScene().loop=e.target.checked;persist()};$('addNext').onclick=addNext;$('addSound').onclick=newSoundTile;$('modalClose').onclick=closeModal;$('modalBackdrop').onclick=e=>{if(e.target===$('modalBackdrop'))closeModal()};document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('modalBackdrop').hidden)closeModal()});window.addEventListener('wheel',()=>{scrollDisabledUntil=Date.now()+2500},{passive:true});window.addEventListener('touchmove',()=>{scrollDisabledUntil=Date.now()+3000},{passive:true});render();if('serviceWorker'in navigator&&location.protocol!=='file:')navigator.serviceWorker.register('./sw.js').catch(()=>{});if(!window.isSecureContext)setTimeout(()=>notify('Use an HTTPS site on Android to enable recording.'),1600)}
 init();

@@ -1,7 +1,7 @@
-# LineRunner v8
+# LineRunner v9
 
-Offline-first line rehearsal PWA designed for Android Chrome. Host the `linerunner` folder's contents on HTTPS (for example, your existing GitHub Pages repository); add to the home screen in Chrome.
+Offline-first line rehearsal PWA for Android Chrome. Host the files in `linerunner/` on your existing HTTPS GitHub Pages URL. No paid services are required.
 
-Version 8 introduces play-scoped characters, standalone scenes in the main library, and character line/scene/duration statistics. Prior IndexedDB projects and recording blobs are retained on the same origin.
+Version 9 adds compact global Sound Effect tiles, reusable recordings across plays and standalone scenes, per-tile trims, audio file import, and folder backups that include their referenced effects. Play folders now show total runtime, and Character Settings use compact, right-aligned statistics.
 
-See `ANDROID-SETUP.md` for safe update and Android testing steps.
+The app continues using the same `LineRunnerDB` IndexedDB database and local recordings. Export a backup from each play before updating and do not clear browser data. See `ANDROID-SETUP.md`.

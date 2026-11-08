@@ -1,42 +1,42 @@
-# LineRunner Version 8 — Android update
+# LineRunner Version 9 — Android update
 
-LineRunner is a free offline-friendly progressive web app (PWA), not an APK. This ZIP contains the site files to replace those in your existing GitHub Pages repository.
+LineRunner is a free, offline-friendly Progressive Web App (PWA), not an APK. This ZIP includes the site files for your existing GitHub Pages site.
 
-## Before updating: back up recordings
+## Protect your existing recordings
 
-In your current Version 7 app, open each play's **⋯** menu and choose **Export backup**. Save the downloaded `.json` backups safely. Because Version 7 stores miscellaneous scenes under a special folder, also export that folder if you use it. Browser storage should carry over when you update the files at the same URL, but a backup is recommended.
+Before updating Version 8, open the **⋯** menu for each play and choose **Export backup**. Keep the downloaded JSON files somewhere safe. Any important standalone scenes should also be moved into a temporary play and exported before updating, as standalone-scene export has not yet been added. You can move them back after importing/restoring if necessary. Exported backups are separate from the app's local auto-save.
 
-## Update the same GitHub Pages site
+## Install Version 9 on your existing GitHub Pages site
 
-1. Download and extract `LineRunner-Android-v8.zip` on a computer.
-2. Open the extracted `linerunner` folder; copy **its contents**, not the enclosing folder, to the root of the existing LineRunner repository.
-3. Replace old `index.html`, `app.js`, `styles.css`, `sw.js`, and other matching files. GitHub Desktop is recommended: clone the repository, replace files, commit, and push to `main`.
-4. Confirm a successful deployment in the repository's **Actions** tab.
-5. Close/reopen LineRunner on Android. If the previous version is still visible, refresh its existing HTTPS GitHub Pages address in Chrome, then reopen the installed PWA.
+1. Download and extract `LineRunner-Android-v9.zip` on a computer.
+2. Open the extracted **linerunner** directory and copy its **contents** (not the surrounding folder) into the root of the same repository that hosts your current LineRunner installation.
+3. Replace `index.html`, `app.js`, `styles.css`, `sw.js`, and other matching files. GitHub Desktop is recommended for reliably replacing existing filenames. Commit and push to `main`.
+4. Confirm the GitHub Pages deployment succeeded under **Actions**.
+5. Close and reopen LineRunner on Android. If the old version is cached, open your existing HTTPS Pages URL in Chrome and refresh it, then reopen the installed PWA.
 
-**Keep the exact same site URL. Do not uninstall the PWA or clear browser/site data.** The app continues to use the same IndexedDB database and original audio blobs. Updating is intended to preserve your saved projects.
+**Keep the identical Pages URL. Do not uninstall LineRunner, clear browsing data, or clear Chrome/site storage.** Version 9 continues using the original local IndexedDB database and audio recording blobs.
 
-## Version 8 changes
+## What's new
 
-- The home library displays plays/folders and a separate **Standalone Scenes** section. **＋ New scene** on the main screen creates a standalone scene by default; the New Scene dialog can optionally save it in any play.
-- Scenes can be moved between a play and the standalone library using **⋯ → Move to**. Moving to a new scope copies or reuses the relevant characters without linking other plays' character profiles.
-- A play now shares its character roster and settings across its scenes. Creating a new scene inside a play makes its existing characters available for line assignment. Characters in standalone scenes are always separate, even when names match.
-- For older data, characters with identical names within one play are unified automatically. The original dialogue recordings are not moved or modified; they remain attached to their lines. Other plays and standalone scenes are not merged.
-- Character Settings shows **Scenes**, **Lines**, and **Duration** for play characters, and **Lines** and **Duration** for standalone characters. Duration is the sum of recorded, trimmed playback time.
-- Instruction text reads exactly:
-  - Play: "Effects are applied during playback; recordings stay unchanged. Character settings apply only to this play."
-  - Standalone scene: "Effects are applied during playback; recordings stay unchanged. Character settings apply only to this scene."
-- The old special "Miscellaneous" folder, if present, is converted to truly standalone scenes on upgrade. Scenes retain their audio and their separate character identities.
+- Play folders display `N scenes · MM:SS` based on the sum of recorded, trimmed dialogue and sound-effect durations.
+- Character Settings show a compact, right-aligned `N scenes · N lines · MM:SS` below the name for play characters; standalone characters omit scenes.
+- Scene timeline has **＋ Add Sound Effect** beside **＋ Add Next Line**.
+- Sound Effect tiles are compact with a subtle dashed outline and waveform symbol. They do not include a mute control. They do include Record/Stop, Play/Pause, Replay, Import Audio and reorder controls.
+- Select a sound from the global library or create one with a name. New sounds can be recorded with the device microphone or imported from an existing audio file. A sound selected in another scene is the same library asset; replacing its recorded audio affects all scenes referencing that sound.
+- Each sound-effect tile keeps its own trim boundaries. Trimming one use does not change the original library recording or other tiles. Tap its duration to enter the waveform trim editor.
+- Sound effects play sequentially in scene playback, and their effective durations count toward each scene and play runtime. Overlapping effects are not supported in this version.
+- Folder backups include all referenced sound effects and their audio, including effects originally created in another play. Import creates a separate play without overwriting other projects and reuses byte-identical audio where possible.
+- Characters remain isolated to a play or standalone scene. Sound effects are global across all plays/scenes.
 
-## Suggested checks on Android
+## Suggested Android tests
 
-1. Confirm older scenes and recordings remain available after the upgrade.
-2. Open a play with characters; create a new scene there and add a line. The play's existing characters should appear in the selector.
-3. Open a character's settings: see accurate counts for scenes, lines and recorded duration across that play, plus the appropriate help text.
-4. Create a standalone scene with a character named John; verify it is not linked to John in a play.
-5. Move a scene into another play or back to the standalone library, and verify the characters are scoped independently.
-6. Export/import a play backup and verify that its scenes share the correct imported character profiles.
+1. Confirm your earlier scenes, character profiles and recordings still work.
+2. Add a phone-ringing effect, record/import audio, and play it in a scene. Check that it adds to the scene duration.
+3. Add that existing sound to a second play or standalone scene; verify it plays and the original recording is not duplicated.
+4. Trim the sound in one scene, then verify that another use still plays its full length.
+5. Export the first play backup and import it under **＋ New Folder → Import Backup**. Confirm the imported sound still works.
+6. Confirm a folder's scene/runtime statistics and a character's compact statistics match recorded content.
 
-## Notes
+## Limitations and safety
 
-The app requires Chrome microphone permission on an HTTPS origin to record. It stores work locally in IndexedDB, so regular backup exports remain important. This release can be verified statically and in a desktop test browser, but recording and playback behavior should still be tested on your Android device.
+All app data and sound recordings live in browser-local IndexedDB. Backups are recommended in case of browser data loss. Imported audio must be a format supported by your device's browser. Browser/Android microphone and playback tests have not been completed in this release environment; verify before relying on it during rehearsal.
