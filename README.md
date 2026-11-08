@@ -1,7 +1,17 @@
-# LineRunner v9
+# LineRunner v10
 
-Offline-first line rehearsal PWA for Android Chrome. Host the files in `linerunner/` on your existing HTTPS GitHub Pages URL. No paid services are required.
+Android-first offline-friendly line-rehearsal PWA, updated from v9.
 
-Version 9 adds compact global Sound Effect tiles, reusable recordings across plays and standalone scenes, per-tile trims, audio file import, and folder backups that include their referenced effects. Play folders now show total runtime, and Character Settings use compact, right-aligned statistics.
+## What's new
+- Scene rows in the library show **dialogue lines and total duration**, including sound effects in time but not in the line count.
+- Every dialogue or effect tile has a `+` button alongside its Up and Down controls. Choose **Add Dialogue** or **Add Sound Effect** to insert immediately after that tile.
+- Sound Effect tiles are created immediately, with an empty sound selector inside the tile. Tap **Choose sound effect** to choose from the global library or create a new one.
+- Dialogue Timeline separately reports line and effect counts, plus total duration.
+- Playback follows stable tile IDs and remains in sequence if tiles are inserted while a scene plays.
+- The transport counter is labeled **Tile**, as it navigates every dialogue and effect tile, not just dialogue lines.
 
-The app continues using the same `LineRunnerDB` IndexedDB database and local recordings. Export a backup from each play before updating and do not clear browser data. See `ANDROID-SETUP.md`.
+## Storage and updating
+Use the same GitHub Pages address and retain browser site data to preserve the existing IndexedDB projects. **Export folder backups before updating.** Do not uninstall the PWA or clear Chrome storage. See `ANDROID-SETUP.md` for deployment steps.
+
+## Testing notes
+Syntax and ZIP checks can be performed without Android, but live microphone recording, audio playback, and service-worker update behavior need validation on an Android device.

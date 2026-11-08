@@ -1,4 +1,4 @@
-# LineRunner Version 9 — Android update
+# LineRunner Version 10 — Android update
 
 LineRunner is a free, offline-friendly Progressive Web App (PWA), not an APK. This ZIP includes the site files for your existing GitHub Pages site.
 
@@ -6,15 +6,15 @@ LineRunner is a free, offline-friendly Progressive Web App (PWA), not an APK. Th
 
 Before updating Version 8, open the **⋯** menu for each play and choose **Export backup**. Keep the downloaded JSON files somewhere safe. Any important standalone scenes should also be moved into a temporary play and exported before updating, as standalone-scene export has not yet been added. You can move them back after importing/restoring if necessary. Exported backups are separate from the app's local auto-save.
 
-## Install Version 9 on your existing GitHub Pages site
+## Install Version 10 on your existing GitHub Pages site
 
-1. Download and extract `LineRunner-Android-v9.zip` on a computer.
+1. Download and extract `LineRunner-Android-v10.zip` on a computer.
 2. Open the extracted **linerunner** directory and copy its **contents** (not the surrounding folder) into the root of the same repository that hosts your current LineRunner installation.
 3. Replace `index.html`, `app.js`, `styles.css`, `sw.js`, and other matching files. GitHub Desktop is recommended for reliably replacing existing filenames. Commit and push to `main`.
 4. Confirm the GitHub Pages deployment succeeded under **Actions**.
 5. Close and reopen LineRunner on Android. If the old version is cached, open your existing HTTPS Pages URL in Chrome and refresh it, then reopen the installed PWA.
 
-**Keep the identical Pages URL. Do not uninstall LineRunner, clear browsing data, or clear Chrome/site storage.** Version 9 continues using the original local IndexedDB database and audio recording blobs.
+**Keep the identical Pages URL. Do not uninstall LineRunner, clear browsing data, or clear Chrome/site storage.** Version 10 continues using the original local IndexedDB database and audio recording blobs.
 
 ## What's new
 
@@ -40,3 +40,12 @@ Before updating Version 8, open the **⋯** menu for each play and choose **Expo
 ## Limitations and safety
 
 All app data and sound recordings live in browser-local IndexedDB. Backups are recommended in case of browser data loss. Imported audio must be a format supported by your device's browser. Browser/Android microphone and playback tests have not been completed in this release environment; verify before relying on it during rehearsal.
+
+
+## Version 10 smoke test
+1. Open a scene with dialogue and sound effects. Confirm main-library scene details show **dialogue lines · total time**, not an effect count.
+2. Tap `+` on a middle tile and insert a dialogue tile; verify that the new tile is immediately below it. Repeat with a Sound Effect tile.
+3. Confirm the Sound Effect tile appears blank with **Choose sound effect**; tap it and assign an existing sound or create a new one.
+4. Check timeline summary: line count excludes Sound Effect tiles, effect count reports them separately, duration includes their recordings and applied trims.
+5. While scene playback is running, insert a tile before or after the current tile and confirm playback continues through the correct next tile.
+6. Verify existing recordings, character settings, and folder backups.
