@@ -1,5 +1,7 @@
-# LineRunner — Android Version 7
+# LineRunner v8
 
-A free, local-first actor's line rehearsal PWA. See `ANDROID-SETUP.md` for instructions to update an existing GitHub Pages installation.
+Offline-first line rehearsal PWA designed for Android Chrome. Host the `linerunner` folder's contents on HTTPS (for example, your existing GitHub Pages repository); add to the home screen in Chrome.
 
-This release includes a simplified scene header, consistent scene settings icon, total recorded scene duration, and continuous playback when jumping to a different line. No subscriptions or external APIs are required.
+Version 8 introduces play-scoped characters, standalone scenes in the main library, and character line/scene/duration statistics. Prior IndexedDB projects and recording blobs are retained on the same origin.
+
+See `ANDROID-SETUP.md` for safe update and Android testing steps.

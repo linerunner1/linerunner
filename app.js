@@ -29,31 +29,187 @@ function dbAll(store){return new Promise((res,rej)=>{const r=db.transaction(stor
 function persist(){if(!db)return;$('saveStatus').textContent='Saving';clearTimeout(saveTimer);saveTimer=setTimeout(async()=>{try{await dbPut('kv',{key:'main',value:state});$('saveStatus').textContent='Saved locally'}catch(e){notify('Could not save: '+e.message)}},100)}
 function modal(title,body){$('modalTitle').textContent=title;$('modalBody').className='modalBody';$('modalBody').replaceChildren(body);$('modalBackdrop').hidden=false}
 function closeModal(){$('modalBackdrop').hidden=true;$('modalBody').replaceChildren()}
-function ensureMisc(){let misc=state.plays.find(p=>p.misc===true);if(!misc){misc={id:uid(),name:'Miscellaneous',misc:true,open:true};state.plays.push(misc)}for(const s of state.scenes){if(!state.plays.find(p=>p.id===s.playId))s.playId=misc.id}return misc}
-function migrate(){state.plays||=[];state.scenes||=[];state.characters||=[];ensureMisc();for(const c of state.characters){c.recordPitch=Number(c.recordPitch??0);c.effect=c.effect||'none';c.muted=!!c.muted}for(const s of state.scenes){s.lines||=[];s.cast||=[];s.mutedCharacters||=[];for(const id of s.mutedCharacters){const c=getChar(id);if(c)c.muted=true}s.mutedCharacters=[];for(const l of s.lines){if(l.muteOverride===undefined)l.muteOverride=l.muted===true?true:null;l.recordPitch=undefined;if(l.muteOverride!==null&&l.muteOverride!==undefined&&!!l.muteOverride===!!getChar(l.characterId)?.muted)l.muteOverride=null}}state.version=6;state.activeScene=null}
+const scopeOf=s=>s.playId||'scene:'+s.id;
+const scopedScenes=s=>state.scenes.filter(x=>scopeOf(x)===scopeOf(s));
+const sceneCharIds=s=>[...new Set(s.lines.map(l=>l.characterId).filter(id=>getChar(id)))];
+const scopeCharIds=s=>[...new Set(scopedScenes(s).flatMap(scene=>[...(scene.cast||[]),...scene.lines.map(l=>l.characterId)]))].filter(id=>getChar(id));
+const sameName=(a,b)=>String(a||'').trim().toLocaleLowerCase()===String(b||'').trim().toLocaleLowerCase();
+function normalizeCharacterScopes(){
+ // Reconcile older scene-specific characters with the requested play-level roster.
+ // Identical names inside one play resolve to one identity; identities never cross scopes.
+ const canonical=new Map(),usedBy=new Map();
+ for(const scene of state.scenes){
+  const scope=scopeOf(scene),refs=[...new Set([...(scene.cast||[]),...scene.lines.map(l=>l.characterId)])],mapping=new Map();
+  for(const id of refs){
+   const c=getChar(id);if(!c)continue;
+   const key=scope+'\u0000'+c.name.trim().toLocaleLowerCase();
+   let canonicalId=canonical.get(key);
+   if(!canonicalId){
+    // If the same legacy character ID occurs in another scope, fork it with identical settings.
+    if(usedBy.has(id)&&usedBy.get(id)!==scope){const newChar={...c,id:uid()};state.characters.push(newChar);canonicalId=newChar.id}
+    else canonicalId=id;
+    canonical.set(key,canonicalId);usedBy.set(canonicalId,scope);
+   }
+   mapping.set(id,canonicalId);
+  }
+  for(const l of scene.lines)if(mapping.has(l.characterId))l.characterId=mapping.get(l.characterId);
+  scene.cast=[...new Set([...scene.cast.map(id=>mapping.get(id)||id),...scene.lines.map(l=>l.characterId)])].filter(id=>getChar(id));
+ }
+}
+function migrate(){
+ state.plays||=[];state.scenes||=[];state.characters||=[];
+ const miscellaneous=new Set(state.plays.filter(p=>p.misc===true).map(p=>p.id));
+ for(const scene of state.scenes){
+  if(miscellaneous.has(scene.playId)||!state.plays.some(p=>p.id===scene.playId))scene.playId=null;
+  scene.lines||=[];scene.cast||=[];scene.mutedCharacters||=[];
+ }
+ state.plays=state.plays.filter(p=>!p.misc);
+ for(const c of state.characters){c.recordPitch=Number(c.recordPitch??0);c.effect=c.effect||'none';c.muted=!!c.muted}
+ for(const scene of state.scenes){
+  for(const id of scene.mutedCharacters){const c=getChar(id);if(c)c.muted=true}
+  scene.mutedCharacters=[];
+  for(const l of scene.lines){
+   if(l.muteOverride===undefined)l.muteOverride=l.muted===true?true:null;
+   l.recordPitch=undefined;
+   if(l.muteOverride!=null&&!!l.muteOverride===!!getChar(l.characterId)?.muted)l.muteOverride=null;
+  }
+ }
+ normalizeCharacterScopes();state.version=8;state.activeScene=null;
+}
+function findScopedCharacter(scene,name){return scopeCharIds(scene).map(id=>getChar(id)).find(c=>c&&sameName(c.name,name))||null}
+function moveSceneToScope(scene,newPlayId){
+ if((scene.playId||null)===(newPlayId||null))return;
+ // Determine destination profiles before changing membership.
+ const targets=state.scenes.filter(s=>s.id!==scene.id&&(s.playId||null)===(newPlayId||null)&&!!newPlayId);
+ const targetIds=[...new Set(targets.flatMap(s=>sceneCharIds(s)))];
+ const mapping=new Map();
+ for(const oldId of [...new Set([...scene.cast,...scene.lines.map(l=>l.characterId)])]){
+  const original=getChar(oldId);if(!original)continue;
+  const existing=targetIds.map(id=>getChar(id)).find(c=>c&&sameName(c.name,original.name));
+  if(existing)mapping.set(oldId,existing.id);
+  else{const clone={...original,id:uid()};state.characters.push(clone);mapping.set(oldId,clone.id);targetIds.push(clone.id)}
+ }
+ scene.playId=newPlayId||null;
+ scene.cast=[...new Set(scene.cast.map(id=>mapping.get(id)||id))];
+ for(const line of scene.lines)if(mapping.has(line.characterId))line.characterId=mapping.get(line.characterId);
+}
 function openHome(){selectedLine=0;if(recording){notify('Stop recording before leaving the scene.');return}stop();state.activeScene=null;persist();render();window.scrollTo({top:0,behavior:'instant'})}
 function openScene(id){selectedLine=0;if(recording){notify('Stop recording before changing scenes.');return}stop();state.activeScene=id;persist();render();window.scrollTo({top:0,behavior:'instant'})}
 function render(){const s=getScene();$('home').hidden=!!s;$('scene').hidden=!s;if(!s){renderFolders();return}renderScene()}
-function renderFolders(){const root=$('folders');root.replaceChildren();ensureMisc();for(const p of state.plays){const scenes=state.scenes.filter(s=>s.playId===p.id),box=make('section','folder'),head=make('div','folderHead');const toggle=button('',()=>{p.open=p.open===false?true:false;persist();renderFolders()},'folderToggle');toggle.append(make('span','symbol',p.open===false?'📁':'📂'));const label=make('span');label.append(make('strong','',p.name),make('small','',scenes.length+' scene'+(scenes.length===1?'':'s')));toggle.append(label);head.append(toggle);const tools=make('div','folderTools');const edit=button('⋯',()=>editFolder(p.id),'iconBtn');edit.title='Folder settings';tools.append(edit);head.append(tools);box.append(head);if(p.open!==false){const body=make('div','folderBody');for(const s of scenes){const row=make('div','sceneRow');const link=button('',()=>openScene(s.id),'sceneLink');link.append(make('span','',s.name),make('small','',s.lines.length+' lines'));const menu=button('⋯',()=>editScene(s.id),'iconBtn sceneMenuBtn');menu.title='Manage '+s.name;menu.setAttribute('aria-label','Settings for '+s.name);row.append(link,menu);body.append(row)}if(!scenes.length)body.append(make('div','emptyFolder','No scenes yet.'));body.append(button('＋ New scene',()=>createScene(p.id),'newInFolder'));box.append(body)}root.append(box)}}
+function renderFolders(){
+ const root=$('folders');root.replaceChildren();
+ for(const p of state.plays){
+  const scenes=state.scenes.filter(s=>s.playId===p.id),box=make('section','folder'),head=make('div','folderHead');
+  const toggle=button('',()=>{p.open=p.open===false;persist();renderFolders()},'folderToggle');
+  toggle.append(make('span','symbol',p.open===false?'📁':'📂'));
+  const label=make('span');label.append(make('strong','',p.name),make('small','',scenes.length+' scene'+(scenes.length===1?'':'s')));
+  toggle.append(label);head.append(toggle);
+  const edit=button('⋯',()=>editFolder(p.id),'iconBtn');edit.title='Play settings';edit.setAttribute('aria-label','Settings for '+p.name);
+  head.append(edit);box.append(head);
+  if(p.open!==false){const body=make('div','folderBody');for(const scene of scenes)body.append(sceneRow(scene));if(!scenes.length)body.append(make('div','emptyFolder','No scenes yet.'));body.append(button('＋ New scene',()=>createScene(p.id),'newInFolder'));box.append(body)}
+  root.append(box);
+ }
+ const standalone=state.scenes.filter(s=>!s.playId),section=make('section','standaloneGroup'),head=make('div','standaloneHead');
+ head.append(make('h2','','Standalone Scenes'),button('＋ New scene',()=>createScene(null),'button ghost small'));section.append(head);
+ if(!standalone.length)section.append(make('p','standaloneEmpty','No standalone scenes yet.'));
+ for(const scene of standalone)section.append(sceneRow(scene));root.append(section);
+}
+function sceneRow(s){
+ const row=make('div','sceneRow');const link=button('',()=>openScene(s.id),'sceneLink');
+ link.append(make('span','',s.name),make('small','',s.lines.length+' lines'));
+ const menu=button('⋯',()=>editScene(s.id),'iconBtn sceneMenuBtn');menu.title='Manage '+s.name;menu.setAttribute('aria-label','Settings for '+s.name);
+ row.append(link,menu);return row;
+}
 function createFolder(){const body=make('div','folderChoice');body.append(button('＋ Create new folder',createEmptyFolder,'button primary'),button('↥ Import folder backup',chooseFolderBackup,'button ghost'));modal('Add folder',body)}
 function createEmptyFolder(){const name=textInput('','Folder or play name'),body=make('div');body.append(field('Folder name',name),actions(button('Create folder',()=>{if(!name.value.trim())return notify('Enter a folder name');state.plays.push({id:uid(),name:name.value.trim(),open:true});persist();closeModal();render()},'button primary')));modal('New folder',body);name.focus()}
-function editFolder(id){const p=state.plays.find(p=>p.id===id);if(!p)return;const name=textInput(p.name),body=make('div');body.append(field('Folder name',name));const remove=button('Delete folder',()=>{if(state.scenes.some(s=>s.playId===id))return notify('Move scenes to another folder before deleting.');if(p.misc)return notify('Miscellaneous cannot be deleted.');if(!confirm('Delete folder '+p.name+'?'))return;state.plays=state.plays.filter(x=>x.id!==id);persist();closeModal();render()},'button danger');if(p.misc)remove.disabled=true;body.append(actions(remove,button('↧ Export backup',()=>exportFolderBackup(id).catch(e=>notify('Backup failed: '+e.message)),'button ghost'),button('Save',()=>{if(!name.value.trim())return;p.name=name.value.trim();persist();closeModal();render()},'button primary')));modal('Folder settings',body)}
-function createScene(folderId){const name=textInput('','Scene title'),folder=dropdown(state.plays.map(p=>[p.id,p.name]),folderId||ensureMisc().id),body=make('div');body.append(field('Scene name',name),field('Folder',folder),actions(button('Cancel',closeModal),button('Create scene',()=>{if(!name.value.trim())return notify('Enter a scene title');const s={id:uid(),name:name.value.trim(),playId:folder.value,cast:[],lines:[],loop:false,mutedCharacters:[]};state.scenes.push(s);state.activeScene=s.id;persist();closeModal();render();window.scrollTo(0,0)},'button primary')));modal('New scene',body);name.focus()}
-function editScene(sceneId=state.activeScene){const s=state.scenes.find(s=>s.id===sceneId);if(!s)return;const name=textInput(s.name),folder=dropdown(state.plays.map(p=>[p.id,p.name]),s.playId),body=make('div');body.append(field('Scene name',name),field('Move to folder',folder));body.append(actions(button('Delete scene',async()=>{if(!confirm('Permanently delete this scene and all its recordings?'))return;const ids=s.lines.map(l=>l.audioId).filter(Boolean);state.scenes=state.scenes.filter(x=>x.id!==s.id);if(state.activeScene===s.id){stop();state.activeScene=null}persist();closeModal();render();for(const id of ids){if(!state.scenes.some(scene=>scene.lines.some(l=>l.audioId===id)))await dbDelete('audio',id).catch(()=>{})}},'button danger'),button('Save',()=>{if(!name.value.trim())return;s.name=name.value.trim();s.playId=folder.value;persist();closeModal();render()},'button primary')));modal('Scene settings',body)}
-function renderScene(){const s=getScene(),p=state.plays.find(p=>p.id===s.playId);$('breadcrumb').textContent=p?.name||'Miscellaneous';$('sceneTitle').textContent=s.name;$('sceneSubtitle').textContent=s.lines.length+' dialogue lines';$('loop').checked=!!s.loop;updateSceneTotals();renderCast();renderTimeline();refreshPlayButtons()}
+function editFolder(id){const p=state.plays.find(p=>p.id===id);if(!p)return;const name=textInput(p.name),body=make('div');body.append(field('Folder name',name));const remove=button('Delete folder',()=>{if(state.scenes.some(s=>s.playId===id))return notify('Move scenes to another folder before deleting.');if(!confirm('Delete folder '+p.name+'?'))return;state.plays=state.plays.filter(x=>x.id!==id);persist();closeModal();render()},'button danger');body.append(actions(remove,button('↧ Export backup',()=>exportFolderBackup(id).catch(e=>notify('Backup failed: '+e.message)),'button ghost'),button('Save',()=>{if(!name.value.trim())return;p.name=name.value.trim();persist();closeModal();render()},'button primary')));modal('Folder settings',body)}
+function createScene(folderId=null){
+ const name=textInput('','Scene title');
+ const options=[['','Main library (standalone)'],...state.plays.map(p=>[p.id,p.name])];
+ const folder=dropdown(options,folderId||''),body=make('div');
+ body.append(field('Scene name',name),field('Save in',folder),actions(button('Cancel',closeModal),button('Create scene',()=>{
+  if(!name.value.trim())return notify('Enter a scene title');
+  const scene={id:uid(),name:name.value.trim(),playId:folder.value||null,cast:[],lines:[],loop:false,mutedCharacters:[]};
+  state.scenes.push(scene);state.activeScene=scene.id;persist();closeModal();render();window.scrollTo(0,0);
+ },'button primary')));
+ modal('New scene',body);name.focus();
+}
+function editScene(sceneId=state.activeScene){
+ const s=state.scenes.find(s=>s.id===sceneId);if(!s)return;
+ const name=textInput(s.name),folder=dropdown([['','Main library (standalone)'],...state.plays.map(p=>[p.id,p.name])],s.playId||''),body=make('div');
+ body.append(field('Scene name',name),field('Move to',folder));
+ body.append(actions(button('Delete scene',async()=>{
+  if(!confirm('Permanently delete this scene and all its recordings?'))return;
+  const ids=s.lines.map(l=>l.audioId).filter(Boolean);state.scenes=state.scenes.filter(x=>x.id!==s.id);
+  if(state.activeScene===s.id){stop();state.activeScene=null}
+  persist();closeModal();render();
+  for(const id of ids){if(!state.scenes.some(scene=>scene.lines.some(l=>l.audioId===id)))await dbDelete('audio',id).catch(()=>{})}
+ },'button danger'),button('Save',()=>{
+  if(!name.value.trim())return notify('Enter a scene name');
+  moveSceneToScope(s,folder.value||null);s.name=name.value.trim();persist();closeModal();render();
+ },'button primary')));
+ modal('Scene settings',body);
+}
+function renderScene(){const s=getScene(),p=state.plays.find(p=>p.id===s.playId);$('breadcrumb').textContent=p?.name||'';$('breadcrumb').hidden=!p;$('sceneTitle').textContent=s.name;$('sceneSubtitle').textContent=s.lines.length+' dialogue lines';$('loop').checked=!!s.loop;updateSceneTotals();renderCast();renderTimeline();refreshPlayButtons()}
 function updateSceneTotals(){
  const s=getScene();if(!s)return;
  const total=s.lines.reduce((sum,l)=>sum+(l.audioId?duration(l):0),0);
  $('lineCount').textContent=s.lines.length+' lines · '+stamp(total);
 }
-function renderCast(){const s=getScene(),root=$('cast');root.replaceChildren();const ids=[...new Set([...s.cast,...s.lines.map(l=>l.characterId)])];for(const id of ids){const c=getChar(id);if(!c)continue;const b=button(c.name,()=>characterSettings(id),'castBtn'+(c.muted?' muted':''));b.title='Character settings: '+c.name;root.append(b)}if(!ids.length)root.append(make('span','tileNote','Create a character in the first dialogue tile.'))}
-function speakerOptions(line){const s=getScene();const ids=[...new Set([...s.cast,...s.lines.map(l=>l.characterId)])].filter(id=>getChar(id));return [['','Choose character…'],...ids.map(id=>[id,getChar(id).name]),['__new','＋ New character']]}
-function createCharacterForLine(lineId){const name=textInput('','Type character name (emoji optional)'),body=make('div');body.append(field('Character name',name),actions(button('Cancel',closeModal),button('Create character',()=>{if(!name.value.trim())return notify('Enter a character name');const c={id:uid(),name:name.value.trim(),recordPitch:0,effect:'none',muted:false};state.characters.push(c);const s=getScene(),l=s.lines.find(x=>x.id===lineId);if(l){l.characterId=c.id;if(!s.cast.includes(c.id))s.cast.push(c.id)}persist();closeModal();renderScene()},'button primary')));modal('New character',body);name.focus()}
+function renderCast(){
+ const s=getScene(),root=$('cast');root.replaceChildren();
+ for(const id of sceneCharIds(s)){
+  const c=getChar(id);if(!c)continue;
+  const b=button(c.name,()=>characterSettings(id),'castBtn'+(c.muted?' muted':''));b.title='Character settings: '+c.name;root.append(b);
+ }
+ if(!sceneCharIds(s).length)root.append(make('span','tileNote','Create a character in the first dialogue tile.'));
+}
+function speakerOptions(line){
+ const s=getScene(),ids=scopeCharIds(s);
+ return [['','Choose character…'],...ids.map(id=>[id,getChar(id).name]),['__new','＋ New character']];
+}
+function createCharacterForLine(lineId){
+ const name=textInput('','Type character name (emoji optional)'),body=make('div');
+ body.append(field('Character name',name),actions(button('Cancel',closeModal),button('Create character',()=>{
+  if(!name.value.trim())return notify('Enter a character name');
+  const s=getScene(),l=s.lines.find(x=>x.id===lineId);if(!l)return;
+  let c=findScopedCharacter(s,name.value);
+  if(!c){c={id:uid(),name:name.value.trim(),recordPitch:0,effect:'none',muted:false};state.characters.push(c)}
+  l.characterId=c.id;if(!s.cast.includes(c.id))s.cast.push(c.id);
+  persist();closeModal();renderScene();
+ },'button primary')));modal('New character',body);name.focus();
+}
 function addNext(){const s=getScene();s.lines.push({id:uid(),characterId:'',type:'audio',text:'',audioId:null,duration:0,revealed:false,muteOverride:null});persist();renderScene();document.querySelector('.tile:last-child')?.scrollIntoView({behavior:'smooth',block:'center'})}
 function changeSpeaker(lineId,value){if(value==='__new')return createCharacterForLine(lineId);const l=getScene().lines.find(x=>x.id===lineId);if(!l)return;l.characterId=value;if(value&&!getScene().cast.includes(value))getScene().cast.push(value);persist();renderScene()}
 function effectiveMute(line){const c=getChar(line.characterId);return line.muteOverride===null||line.muteOverride===undefined?!!(c?.muted||getScene()?.mutedCharacters?.includes(line.characterId)):!!line.muteOverride}
 function muteLine(l){const requested=!effectiveMute(l);const characterDefault=!!getChar(l.characterId)?.muted;l.muteOverride=requested===characterDefault?null:requested;persist();renderTimeline()}
-function characterSettings(id){const c=getChar(id);if(!c)return;const name=textInput(c.name),body=make('div'),mute=make('input');mute.type='checkbox';mute.checked=!!c.muted;const row=make('div','muteRow');row.append(make('strong','', 'Mute character'),mute);const pitchBox=make('div','field'),pitchHead=make('div','rangeHead'),pitchLabel=make('label','','Pitch (semitones)'),out=make('output','',String(c.recordPitch||0));pitchHead.append(pitchLabel,out);const pitch=make('input','range');pitch.type='range';pitch.min=-6;pitch.max=6;pitch.step=1;pitch.value=c.recordPitch||0;pitch.oninput=()=>out.textContent=(+pitch.value>0?'+':'')+pitch.value;pitchBox.append(pitchHead,pitch);const effect=dropdown([['none','Natural (no effect)'],['echo','Echo'],['reverb','Reverb'],['telephone','Telephone'],['robot','Robot'],['deep','Deep / dark'],['bright','Bright / thin']],c.effect||'none');body.append(field('Character name',name,'This updates every line using this character.'),row,pitchBox,field('Voice effect',effect,'Effects are applied during playback; recordings stay unchanged.'),actions(button('Cancel',closeModal),button('Save settings',()=>{if(!name.value.trim())return notify('Enter a name');c.name=name.value.trim();c.muted=mute.checked;c.recordPitch=Number(pitch.value);c.effect=effect.value;persist();closeModal();renderScene()},'button primary')));modal('Character settings',body)}
+function characterSettings(id){
+ const c=getChar(id),scene=getScene();if(!c||!scene)return;
+ const isPlay=!!scene.playId;const involved=scopedScenes(scene).filter(s=>s.lines.some(l=>l.characterId===id));
+ const allLines=involved.flatMap(s=>s.lines.filter(l=>l.characterId===id));
+ const totalTime=allLines.reduce((total,l)=>total+(l.audioId?duration(l):0),0);
+ const name=textInput(c.name),body=make('div'),mute=make('input');mute.type='checkbox';mute.checked=!!c.muted;
+ body.append(field('Character name',name));
+ const stats=make('div','characterStats');
+ const stat=(label,value)=>{const cell=make('div','characterStat');cell.append(make('small','',label),make('strong','',String(value)));stats.append(cell)};
+ if(isPlay)stat('Scenes',involved.length);
+ stat('Lines',allLines.length);stat('Duration',stamp(totalTime));body.append(stats);
+ const row=make('div','muteRow');row.append(make('strong','', 'Mute character'),mute);
+ const pitchBox=make('div','field'),pitchHead=make('div','rangeHead'),pitchLabel=make('label','','Pitch (semitones)'),out=make('output','',String(c.recordPitch||0));
+ pitchHead.append(pitchLabel,out);const pitch=make('input','range');pitch.type='range';pitch.min=-6;pitch.max=6;pitch.step=1;pitch.value=c.recordPitch||0;
+ pitch.oninput=()=>out.textContent=(+pitch.value>0?'+':'')+pitch.value;pitchBox.append(pitchHead,pitch);
+ const effect=dropdown([['none','Natural (no effect)'],['echo','Echo'],['reverb','Reverb'],['telephone','Telephone'],['robot','Robot'],['deep','Deep / dark'],['bright','Bright / thin']],c.effect||'none');
+ body.append(row,pitchBox,field('Voice effect',effect));
+ body.append(make('p','characterHelp','Effects are applied during playback; recordings stay unchanged. Character settings apply only to this '+(isPlay?'play.':'scene.')));
+ body.append(actions(button('Cancel',closeModal),button('Save settings',()=>{
+  if(!name.value.trim())return notify('Enter a name');
+  const collision=scopeCharIds(scene).filter(other=>other!==id).map(other=>getChar(other)).some(other=>other&&sameName(other.name,name.value));
+  if(collision)return notify('That character name is already used in this '+(isPlay?'play':'scene')+'.');
+  c.name=name.value.trim();c.muted=mute.checked;c.recordPitch=Number(pitch.value);c.effect=effect.value;
+  persist();closeModal();renderScene();
+ },'button primary')));
+ modal('Character settings',body);
+}
 function renderTimeline(){const s=getScene(),root=$('timeline');root.replaceChildren();if(!s)return;updateSceneTotals();for(let index=0;index<s.lines.length;index++){const l=s.lines[index],active=playingId===l.id&&(sceneRunning||paused),tile=make('article','tile'+(active?' active':''));tile.dataset.id=l.id;tile.classList.toggle('trimMode',trimOpenId===l.id);if(trimOpenId===l.id){tile.style.height=trimTileHeight+'px';tile.style.minHeight=trimTileHeight+'px';tile.style.maxHeight=trimTileHeight+'px'}const top=make('div','tileTop');top.append(make('span','tileNum',String(index+1).padStart(2,'0')));if(trimOpenId===l.id){const label=make('strong','trimTitle','Trim recording');top.append(label);const done=button('Done',()=>finishTrim(l),'button ghost small');top.append(done);tile.append(top);renderTrimContents(tile,l);root.append(tile);continue}
 const sel=dropdown(speakerOptions(l),l.characterId||'');sel.setAttribute('aria-label','Character for line '+(index+1));sel.onchange=()=>changeSpeaker(l.id,sel.value);const box=make('div','speakerSelect');box.append(sel);top.append(box);const time=button(active?stamp(elapsed)+' / '+stamp(duration(l)):stamp(duration(l)),()=>openTrim(l),'tileTime trimTrigger');time.title=l.audioId?'Trim recording':'Record a line to enable trimming';time.disabled=!l.audioId;top.append(time);const removeLine=button('×',()=>deleteLine(l.id),'iconBtn');removeLine.title='Delete dialogue line';removeLine.setAttribute('aria-label','Delete line '+(index+1));top.append(removeLine);tile.append(top);
 if(!l.revealed){const reveal=button('◉ Reveal dialogue',()=>{l.revealed=true;persist();renderTimeline()},'reveal');tile.append(reveal)}else{const area=make('div','dialogueBox'),edit=make('textarea');edit.value=l.text||'';edit.placeholder='Double tap to enter text';edit.rows=2;edit.setAttribute('aria-label','Dialogue text, line '+(index+1));edit.oninput=()=>{l.text=edit.value;persist()};area.append(edit,button('Hide dialogue',()=>{l.revealed=false;persist();renderTimeline()},'hideText'));tile.append(area)}
@@ -209,7 +365,7 @@ async function encodeBlob(blob){const bytes=new Uint8Array(await blob.arrayBuffe
 function decodeBlob(a){const raw=atob(a.base64),bytes=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);return new Blob([bytes],{type:a.type||'audio/webm'})}
 async function exportFolderBackup(id){const folder=state.plays.find(p=>p.id===id);if(!folder)return;const scenes=state.scenes.filter(s=>s.playId===id);const charIds=new Set(scenes.flatMap(s=>[...s.cast,...s.lines.map(l=>l.characterId)]));const chars=state.characters.filter(c=>charIds.has(c.id));const audioIds=[...new Set(scenes.flatMap(s=>s.lines.map(l=>l.audioId)).filter(Boolean))];const audios=[];for(const aid of audioIds){const r=await dbGet('audio',aid);if(r?.blob)audios.push({id:aid,type:r.blob.type,base64:await encodeBlob(r.blob)})}downloadJson({format:'LineRunner Folder Backup v1',exportedAt:new Date().toISOString(),folder,scenes,characters:chars,audios},folder.name.replace(/[^a-z0-9-_]+/gi,'-')+'-LineRunner-backup.json');notify('Folder backup downloaded')}
 function chooseFolderBackup(){const body=make('div');body.append(make('p','note','Import adds a separate folder without replacing existing scenes. Older whole-library backups can also be imported as separate folders.'));const file=make('input');file.type='file';file.accept='.json,application/json';file.onchange=async()=>{if(!file.files?.[0])return;await importFolderBackup(file.files[0])};body.append(field('Choose backup file',file));modal('Import folder backup',body)}
-async function importFolderBackup(file){let data;try{data=JSON.parse(await file.text());if(data.format==='LineRunner Backup v1'){const folder=data.state?.plays?.find(p=>p.id===data.state.scenes?.[0]?.playId)||{id:uid(),name:'Imported library'};data={format:'LineRunner Folder Backup v1',folder,scenes:data.state.scenes||[],characters:data.state.characters||[],audios:data.audios||[]}}if(data.format!=='LineRunner Folder Backup v1'||!data.folder||!Array.isArray(data.scenes)||!Array.isArray(data.characters)||!Array.isArray(data.audios))throw Error('Unsupported backup format');if(data.audios.some(a=>typeof a.base64!=='string'))throw Error('Invalid audio data')}catch(e){return notify('Cannot import backup: '+e.message)}const charMap=new Map(),audioMap=new Map();const importId=uid(),newFolder={id:importId,name:data.folder.name+' (Imported)',open:true};const chars=data.characters.map(c=>{const id=uid();charMap.set(c.id,id);return {...c,id}});const audios=data.audios.map(a=>{const id=uid();audioMap.set(a.id,id);return {id,blob:decodeBlob(a)}});const scenes=data.scenes.map(s=>({...s,id:uid(),playId:importId,cast:(s.cast||[]).map(id=>charMap.get(id)).filter(Boolean),lines:(s.lines||[]).map(l=>({...l,id:uid(),characterId:charMap.get(l.characterId)||'',audioId:audioMap.get(l.audioId)||null}))}));try{for(const a of audios)await dbPut('audio',a);state.plays.push(newFolder);state.characters.push(...chars);state.scenes.push(...scenes);await dbPut('kv',{key:'main',value:state});closeModal();render();notify('Folder imported without replacing existing work')}catch(e){notify('Import failed: '+e.message)}}
+async function importFolderBackup(file){let data;try{data=JSON.parse(await file.text());if(data.format==='LineRunner Backup v1'){const folder=data.state?.plays?.find(p=>p.id===data.state.scenes?.[0]?.playId)||{id:uid(),name:'Imported library'};data={format:'LineRunner Folder Backup v1',folder,scenes:data.state.scenes||[],characters:data.state.characters||[],audios:data.audios||[]}}if(data.format!=='LineRunner Folder Backup v1'||!data.folder||!Array.isArray(data.scenes)||!Array.isArray(data.characters)||!Array.isArray(data.audios))throw Error('Unsupported backup format');if(data.audios.some(a=>typeof a.base64!=='string'))throw Error('Invalid audio data')}catch(e){return notify('Cannot import backup: '+e.message)}const charMap=new Map(),audioMap=new Map();const importId=uid(),newFolder={id:importId,name:data.folder.name+' (Imported)',open:true};const chars=data.characters.map(c=>{const id=uid();charMap.set(c.id,id);return {...c,id}});const audios=data.audios.map(a=>{const id=uid();audioMap.set(a.id,id);return {id,blob:decodeBlob(a)}});const scenes=data.scenes.map(s=>({...s,id:uid(),playId:importId,cast:(s.cast||[]).map(id=>charMap.get(id)).filter(Boolean),lines:(s.lines||[]).map(l=>({...l,id:uid(),characterId:charMap.get(l.characterId)||'',audioId:audioMap.get(l.audioId)||null}))}));try{for(const a of audios)await dbPut('audio',a);state.plays.push(newFolder);state.characters.push(...chars);state.scenes.push(...scenes);normalizeCharacterScopes();await dbPut('kv',{key:'main',value:state});closeModal();render();notify('Folder imported without replacing existing work')}catch(e){notify('Import failed: '+e.message)}}
 async function playRecorded(l,token){let obj;try{obj=await dbGet('audio',l.audioId)}catch(e){notify('Recording unavailable: '+e.message);return}if(!obj?.blob||token!==playToken)return;let url=URL.createObjectURL(obj.blob);const c=getChar(l.characterId)||{};if(c.recordPitch){try{const processed=await pitchProcessedUrl(obj.blob,Math.max(-6,Math.min(6,c.recordPitch)));if(processed){URL.revokeObjectURL(url);url=processed}}catch(e){notify('Pitch processing unavailable; natural pitch used')}}if(token!==playToken){URL.revokeObjectURL(url);return}
 const a=new Audio(url);a.preload='auto';const bounds=trimBounds(l);const session={audio:a,url,context:null};playing=session;const effect=c.effect||'none';try{if(effect!=='none')session.context=attachEffect(a,effect)}catch(e){console.warn(e)}const result=await new Promise(resolve=>{let done=false;const finish=()=>{if(done)return;done=true;resolve()};session.finish=finish;a.onended=finish;a.onerror=finish;a.ontimeupdate=()=>{if(a.currentTime>=bounds.end-.025)finish()};const start=()=>{if(token!==playToken)return finish();if(paused){setTimeout(start,80);return}if(a.currentTime<bounds.start)a.currentTime=bounds.start;a.play().catch(e=>{notify('Audio could not play: '+e.message);finish()})};start()});a.pause();a.removeAttribute('src');a.load();URL.revokeObjectURL(url);session.context?.close().catch(()=>{});if(playing===session)playing=null;return result}
 function attachEffect(a,effect){const Ctx=window.AudioContext||window.webkitAudioContext;if(!Ctx)return null;const ctx=new Ctx(),source=ctx.createMediaElementSource(a),gain=ctx.createGain();gain.gain.value=.8;let node=source;
@@ -225,5 +381,5 @@ function jump(step){
  if(sceneRunning&&!paused)runSequence(target,true);
  else selectPausedLine(target);
 }
-async function init(){try{db=await openDB();const row=await dbGet('kv','main');if(row?.value?.scenes)state=row.value}catch(e){notify('Browser storage unavailable: '+e.message)}migrate();persist();$('homeBtn').onclick=openHome;$('createFolder').onclick=createFolder;$('sceneMenu').onclick=()=>editScene();$('goTop').onclick=()=>{scrollDisabledUntil=Date.now()+15000;window.scrollTo({top:0,behavior:'smooth'})};$('goBottom').onclick=()=>{scrollDisabledUntil=Date.now()+15000;$('addNext').scrollIntoView({behavior:'smooth',block:'end'})};$('currentLine').addEventListener('change',setLinePosition);$('currentLine').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();setLinePosition();e.target.blur()}});$('masterPlay').onclick=()=>sceneRunning?pauseToggle():playScene();$('prev').onclick=()=>jump(-1);$('next').onclick=()=>jump(1);$('loop').onchange=e=>{getScene().loop=e.target.checked;persist()};$('addNext').onclick=addNext;$('modalClose').onclick=closeModal;$('modalBackdrop').onclick=e=>{if(e.target===$('modalBackdrop'))closeModal()};document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('modalBackdrop').hidden)closeModal()});window.addEventListener('wheel',()=>{scrollDisabledUntil=Date.now()+2500},{passive:true});window.addEventListener('touchmove',()=>{scrollDisabledUntil=Date.now()+3000},{passive:true});render();if('serviceWorker'in navigator&&location.protocol!=='file:')navigator.serviceWorker.register('./sw.js').catch(()=>{});if(!window.isSecureContext)setTimeout(()=>notify('Use an HTTPS site on Android to enable recording.'),1600)}
+async function init(){try{db=await openDB();const row=await dbGet('kv','main');if(row?.value?.scenes)state=row.value}catch(e){notify('Browser storage unavailable: '+e.message)}migrate();persist();$('homeBtn').onclick=openHome;$('createFolder').onclick=createFolder;$('createScene').onclick=()=>createScene(null);$('sceneMenu').onclick=()=>editScene();$('goTop').onclick=()=>{scrollDisabledUntil=Date.now()+15000;window.scrollTo({top:0,behavior:'smooth'})};$('goBottom').onclick=()=>{scrollDisabledUntil=Date.now()+15000;$('addNext').scrollIntoView({behavior:'smooth',block:'end'})};$('currentLine').addEventListener('change',setLinePosition);$('currentLine').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();setLinePosition();e.target.blur()}});$('masterPlay').onclick=()=>sceneRunning?pauseToggle():playScene();$('prev').onclick=()=>jump(-1);$('next').onclick=()=>jump(1);$('loop').onchange=e=>{getScene().loop=e.target.checked;persist()};$('addNext').onclick=addNext;$('modalClose').onclick=closeModal;$('modalBackdrop').onclick=e=>{if(e.target===$('modalBackdrop'))closeModal()};document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('modalBackdrop').hidden)closeModal()});window.addEventListener('wheel',()=>{scrollDisabledUntil=Date.now()+2500},{passive:true});window.addEventListener('touchmove',()=>{scrollDisabledUntil=Date.now()+3000},{passive:true});render();if('serviceWorker'in navigator&&location.protocol!=='file:')navigator.serviceWorker.register('./sw.js').catch(()=>{});if(!window.isSecureContext)setTimeout(()=>notify('Use an HTTPS site on Android to enable recording.'),1600)}
 init();

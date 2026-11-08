@@ -1,42 +1,42 @@
-# LineRunner Version 7 — Update Instructions (Android)
+# LineRunner Version 8 — Android update
 
-LineRunner is a free, local-first Android Progressive Web App (PWA). This ZIP is the website source to update your existing GitHub Pages installation; it is not an APK.
+LineRunner is a free offline-friendly progressive web app (PWA), not an APK. This ZIP contains the site files to replace those in your existing GitHub Pages repository.
 
-## Back up your recordings before updating
+## Before updating: back up recordings
 
-On your existing LineRunner app, open each play's **⋯** menu, use **Export backup**, and save each downloaded JSON file somewhere safe. The backup files include the recordings in that folder. These backups are your safety net if the browser's local data is cleared.
+In your current Version 7 app, open each play's **⋯** menu and choose **Export backup**. Save the downloaded `.json` backups safely. Because Version 7 stores miscellaneous scenes under a special folder, also export that folder if you use it. Browser storage should carry over when you update the files at the same URL, but a backup is recommended.
 
-## Update your existing GitHub Pages site
+## Update the same GitHub Pages site
 
-1. Download and extract **LineRunner-Android-v7.zip** on your computer.
-2. Open the extracted `linerunner` folder. It contains `index.html`, `app.js`, `styles.css`, `sw.js`, the manifest, and app icons.
-3. Open the **same GitHub repository** you used for Version 6. Do not create a different repository or change the URL.
-4. Replace the corresponding old files in the repository root with these new files. **GitHub Desktop is recommended for replacing files with the same names:** clone your existing repo, copy the new files into its local folder, then commit and push to `main`. If using the GitHub website, verify that existing files were actually replaced (not duplicated or nested in an extra `linerunner` folder).
-5. In GitHub's **Actions** tab, confirm that the Pages deployment completed successfully.
-6. Open the installed LineRunner app on your Android phone. Close/reopen it, or visit your existing HTTPS GitHub Pages URL in Chrome and refresh if the old interface is still cached.
+1. Download and extract `LineRunner-Android-v8.zip` on a computer.
+2. Open the extracted `linerunner` folder; copy **its contents**, not the enclosing folder, to the root of the existing LineRunner repository.
+3. Replace old `index.html`, `app.js`, `styles.css`, `sw.js`, and other matching files. GitHub Desktop is recommended: clone the repository, replace files, commit, and push to `main`.
+4. Confirm a successful deployment in the repository's **Actions** tab.
+5. Close/reopen LineRunner on Android. If the previous version is still visible, refresh its existing HTTPS GitHub Pages address in Chrome, then reopen the installed PWA.
 
-**Do not uninstall LineRunner or clear Chrome/LineRunner site data** during the update. Version 7 uses the same IndexedDB database name and existing record layout, so locally saved projects are designed to carry over.
+**Keep the exact same site URL. Do not uninstall the PWA or clear browser/site data.** The app continues to use the same IndexedDB database and original audio blobs. Updating is intended to preserve your saved projects.
 
-## Version 7 changes
+## Version 8 changes
 
-- Above a scene title, show only the play/folder name (no extra `/ Scene` text).
-- Scene settings now use the same `⋯` icon-only control as the home screen.
-- Dialogue Timeline displays both line count and total effective recorded duration. Unrecorded tiles count as zero; trimmed recordings contribute only their included length.
-- While the scene is playing, Previous/Next or selecting another tile's Play button starts from that selected line and **continues through the following lines**. Loop remains active if enabled.
-- While paused or stopped, entering a line number or using Previous/Next stages that line without starting playback. Press Play to resume from there.
+- The home library displays plays/folders and a separate **Standalone Scenes** section. **＋ New scene** on the main screen creates a standalone scene by default; the New Scene dialog can optionally save it in any play.
+- Scenes can be moved between a play and the standalone library using **⋯ → Move to**. Moving to a new scope copies or reuses the relevant characters without linking other plays' character profiles.
+- A play now shares its character roster and settings across its scenes. Creating a new scene inside a play makes its existing characters available for line assignment. Characters in standalone scenes are always separate, even when names match.
+- For older data, characters with identical names within one play are unified automatically. The original dialogue recordings are not moved or modified; they remain attached to their lines. Other plays and standalone scenes are not merged.
+- Character Settings shows **Scenes**, **Lines**, and **Duration** for play characters, and **Lines** and **Duration** for standalone characters. Duration is the sum of recorded, trimmed playback time.
+- Instruction text reads exactly:
+  - Play: "Effects are applied during playback; recordings stay unchanged. Character settings apply only to this play."
+  - Standalone scene: "Effects are applied during playback; recordings stay unchanged. Character settings apply only to this scene."
+- The old special "Miscellaneous" folder, if present, is converted to truly standalone scenes on upgrade. Scenes retain their audio and their separate character identities.
 
-## Suggested Android checks
+## Suggested checks on Android
 
-1. Open a scene in a folder: only the folder name should appear above its title.
-2. Tap the scene `⋯` icon: rename/move/delete options should open.
-3. Record two short lines and trim one: verify the total duration next to the Dialogue Timeline heading changes.
-4. Add an unrecorded tile: it should increase the line count, not the total duration.
-5. Play three recorded lines, then tap Previous or the Play button of an earlier tile: playback should continue to subsequent lines rather than stop after that tile.
-6. Pause, select a different line number, verify playback does not resume until you tap Play.
-7. Reopen the app and confirm your existing scenes and recordings are still available.
+1. Confirm older scenes and recordings remain available after the upgrade.
+2. Open a play with characters; create a new scene there and add a line. The play's existing characters should appear in the selector.
+3. Open a character's settings: see accurate counts for scenes, lines and recorded duration across that play, plus the appropriate help text.
+4. Create a standalone scene with a character named John; verify it is not linked to John in a play.
+5. Move a scene into another play or back to the standalone library, and verify the characters are scoped independently.
+6. Export/import a play backup and verify that its scenes share the correct imported character profiles.
 
 ## Notes
 
-Recording requires Android Chrome microphone permission on a secure HTTPS address. The app can save projects and recordings locally offline after its app shell is cached, but browser storage can be removed by the OS or user. Keep folder backups.
-
-JavaScript syntax and ZIP integrity were checked; live browser automation was blocked by the testing environment. Android playback and recording must be verified on your phone.
+The app requires Chrome microphone permission on an HTTPS origin to record. It stores work locally in IndexedDB, so regular backup exports remain important. This release can be verified statically and in a desktop test browser, but recording and playback behavior should still be tested on your Android device.
